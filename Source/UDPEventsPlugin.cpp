@@ -20,39 +20,39 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "ProcessorPlugin.h"
+#include "UDPEventsPlugin.h"
 
-#include "ProcessorPluginEditor.h"
+#include "UDPEventsPluginEditor.h"
 
 
-ProcessorPlugin::ProcessorPlugin()
+UDPEventsPlugin::UDPEventsPlugin()
     : GenericProcessor("Plugin Name")
 {
 
 }
 
 
-ProcessorPlugin::~ProcessorPlugin()
+UDPEventsPlugin::~UDPEventsPlugin()
 {
 
 }
 
 
-AudioProcessorEditor* ProcessorPlugin::createEditor()
+AudioProcessorEditor* UDPEventsPlugin::createEditor()
 {
-    editor = std::make_unique<ProcessorPluginEditor>(this);
+    editor = std::make_unique<UDPEventsPluginEditor>(this);
     return editor.get();
 }
 
 
-void ProcessorPlugin::updateSettings()
+void UDPEventsPlugin::updateSettings()
 {
 
 
 }
 
 
-void ProcessorPlugin::process(AudioBuffer<float>& buffer)
+void UDPEventsPlugin::process(AudioBuffer<float>& buffer)
 {
 
     checkForEvents(true);
@@ -60,31 +60,31 @@ void ProcessorPlugin::process(AudioBuffer<float>& buffer)
 }
 
 
-void ProcessorPlugin::handleTTLEvent(TTLEventPtr event)
+void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
 
 }
 
 
-void ProcessorPlugin::handleSpike(SpikePtr spike)
+void UDPEventsPlugin::handleSpike(SpikePtr spike)
 {
 
 }
 
 
-void ProcessorPlugin::handleBroadcastMessage(String message)
+void UDPEventsPlugin::handleBroadcastMessage(String message)
 {
 
 }
 
 
-void ProcessorPlugin::saveCustomParametersToXml(XmlElement* parentElement)
+void UDPEventsPlugin::saveCustomParametersToXml(XmlElement* parentElement)
 {
 
 }
 
 
-void ProcessorPlugin::loadCustomParametersFromXml(XmlElement* parentElement)
+void UDPEventsPlugin::loadCustomParametersFromXml(XmlElement* parentElement)
 {
 
 }

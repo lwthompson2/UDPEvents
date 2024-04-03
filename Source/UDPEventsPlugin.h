@@ -20,20 +20,20 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef PROCESSORPLUGIN_H_DEFINED
-#define PROCESSORPLUGIN_H_DEFINED
+#ifndef UDPEVENTSPLUGIN_H_DEFINED
+#define UDPEVENTSPLUGIN_H_DEFINED
 
 #include <ProcessorHeaders.h>
 
 
-class ProcessorPlugin : public GenericProcessor
+class UDPEventsPlugin : public GenericProcessor
 {
 public:
 	/** The class constructor, used to initialize any members. */
-	ProcessorPlugin();
+	UDPEventsPlugin();
 
 	/** The class destructor, used to deallocate memory */
-	~ProcessorPlugin();
+	~UDPEventsPlugin();
 
 	/** If the processor has a custom editor, this method must be defined to instantiate it. */
 	AudioProcessorEditor* createEditor() override;
