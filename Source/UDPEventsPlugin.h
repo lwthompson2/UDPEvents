@@ -71,6 +71,23 @@ public:
 		Parameter objects*/
 	void loadCustomParametersFromXml(XmlElement* parentElement) override;
 
+	bool startAcquisition() override;
+
+	void parameterValueChanged(Parameter* param) override;
+
+private:
+    /** Exposing events received via UDP.*/
+    EventChannel* udpEventChannel;
+
+	int counter = 0; // counts the total number of incoming samples
+    bool state = false; // holds the state of the current TTL line (on or off)
+
+	bool shouldTriggerEvent = false; // true if an event should be manually triggered
+	bool eventWasTriggered = false;	 // true if an event was manually triggered
+	int triggeredEventCounter = 0;	 // counter for manually triggered events
+
+	float eventIntervalMs = 1000.0f; // time between events
+	int outputLine = 0;				 // TTL output line
 };
 
 #endif

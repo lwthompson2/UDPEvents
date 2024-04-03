@@ -60,7 +60,7 @@ extern "C" EXPORT int getPluginInfo(int index, Plugin::PluginInfo* info)
 		info->processor.name = "UDP Events";
 
 		//Type of processor. Can be FILTER, SOURCE, SINK or UTILITY. Specifies where on the processor list will appear
-		info->processor.type = Processor::Type::SOURCE;
+		info->processor.type = Processor::Type::FILTER;
 
 		//Class factory pointer.
 		info->processor.creator = &(Plugin::createProcessor<UDPEventsPlugin>);

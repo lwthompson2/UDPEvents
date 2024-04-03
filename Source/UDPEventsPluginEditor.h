@@ -25,18 +25,39 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <EditorHeaders.h>
 
+class ManualTriggerButton : public ParameterEditor,
+							public Button::Listener
+{
+public:
+	/** Constructor */
+	ManualTriggerButton(Parameter *param);
+
+	/** Destructor*/
+	virtual ~ManualTriggerButton() {}
+
+	/** Respond to trigger button clicks*/
+	void buttonClicked(Button *label) override;
+
+	/** Update view of the parameter editor component*/
+	void updateView(){};
+
+	/** Sets component layout*/
+	void resized() override;
+
+private:
+	std::unique_ptr<UtilityButton> triggerButton;
+};
+
 class UDPEventsPluginEditor : public GenericEditor
 {
 public:
-
 	/** Constructor */
-	UDPEventsPluginEditor(GenericProcessor* parentNode);
+	UDPEventsPluginEditor(GenericProcessor *parentNode);
 
 	/** Destructor */
-	~UDPEventsPluginEditor() { }
+	~UDPEventsPluginEditor() {}
 
 private:
-
 	/** Generates an assertion if this class leaks */
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(UDPEventsPluginEditor);
 };

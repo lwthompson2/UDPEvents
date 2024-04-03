@@ -21,11 +21,38 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "UDPEventsPluginEditor.h"
+#include "UDPEventsPlugin.h"
 
-UDPEventsPluginEditor::UDPEventsPluginEditor(GenericProcessor* parentNode) 
+ManualTriggerButton::ManualTriggerButton(Parameter *param)
+    : ParameterEditor(param)
+{
+    triggerButton = std::make_unique<UtilityButton>("Trigger", Font("Fira Code", "Regular", 12.0f));
+    triggerButton->addListener(this);
+    addAndMakeVisible(triggerButton.get());
+
+    setBounds(0, 0, 70, 20);
+}
+
+void ManualTriggerButton::buttonClicked(Button *b)
+{
+    param->setNextValue(triggerButton->getLabel());
+}
+
+void ManualTriggerButton::resized()
+{
+
+    triggerButton->setBounds(0, 0, 70, 20);
+}
+
+
+UDPEventsPluginEditor::UDPEventsPluginEditor(GenericProcessor *parentNode)
     : GenericEditor(parentNode)
 {
 
-    desiredWidth = 150;
+    desiredWidth = 180;
+    addSliderParameterEditor("interval", 100, 25);
+    addComboBoxParameterEditor("ttl_line", 10, 25);
 
+    Parameter* manualTrigger = getProcessor()->getParameter("manual_trigger");
+    addCustomParameterEditor(new ManualTriggerButton(manualTrigger), 60, 95);
 }
