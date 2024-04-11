@@ -11,3 +11,6 @@
 !**/Build/CMakeLists.txt
 !**/Build/CMAKE_README.txt
 
+# 3. Runtime logs
+
+*.log

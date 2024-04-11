@@ -25,30 +25,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <EditorHeaders.h>
 
-class ManualTriggerButton : public ParameterEditor,
-							public Button::Listener
-{
-public:
-	/** Constructor */
-	ManualTriggerButton(Parameter *param);
-
-	/** Destructor*/
-	virtual ~ManualTriggerButton() {}
-
-	/** Respond to trigger button clicks*/
-	void buttonClicked(Button *label) override;
-
-	/** Update view of the parameter editor component*/
-	void updateView(){};
-
-	/** Sets component layout*/
-	void resized() override;
-
-private:
-	std::unique_ptr<UtilityButton> triggerButton;
-};
-
-class UDPEventsPluginEditor : public GenericEditor
+class UDPEventsPluginEditor : public GenericEditor,
+							  public ComboBox::Listener
 {
 public:
 	/** Constructor */
@@ -57,7 +35,22 @@ public:
 	/** Destructor */
 	~UDPEventsPluginEditor() {}
 
+	/** Called when underlying settings are updated */
+	void updateSettings() override;
+
+	/** Called when a ComboBox changes*/
+	void comboBoxChanged(ComboBox* comboBox) override;
+
+	/** Called just prior to the start of acquisition, to allow custom commands. */
+	void startAcquisition() override;
+
+	/** Called after the end of acquisition, to allow custom commands .*/
+	void stopAcquisition() override;
+
 private:
+	/** Dynamic combo box for selecting a stream by name.*/
+	std::unique_ptr<ComboBox> streamSelection;
+
 	/** Generates an assertion if this class leaks */
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(UDPEventsPluginEditor);
 };

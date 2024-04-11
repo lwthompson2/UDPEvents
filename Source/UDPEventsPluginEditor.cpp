@@ -23,36 +23,69 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "UDPEventsPluginEditor.h"
 #include "UDPEventsPlugin.h"
 
-ManualTriggerButton::ManualTriggerButton(Parameter *param)
-    : ParameterEditor(param)
-{
-    triggerButton = std::make_unique<UtilityButton>("Trigger", Font("Fira Code", "Regular", 12.0f));
-    triggerButton->addListener(this);
-    addAndMakeVisible(triggerButton.get());
-
-    setBounds(0, 0, 70, 20);
-}
-
-void ManualTriggerButton::buttonClicked(Button *b)
-{
-    param->setNextValue(triggerButton->getLabel());
-}
-
-void ManualTriggerButton::resized()
-{
-
-    triggerButton->setBounds(0, 0, 70, 20);
-}
-
-
 UDPEventsPluginEditor::UDPEventsPluginEditor(GenericProcessor *parentNode)
     : GenericEditor(parentNode)
 {
+    desiredWidth = 200;
+    addComboBoxParameterEditor("sync_line", 10, 25);
 
-    desiredWidth = 180;
-    addSliderParameterEditor("interval", 100, 25);
-    addComboBoxParameterEditor("ttl_line", 10, 25);
+    // Select stream with options updated dynamically.
+    streamSelection = std::make_unique<ComboBox>("Stream Selector");
+    streamSelection->setBounds(10, 75, 155, 20);
+    streamSelection->addListener(this);
+    addAndMakeVisible(streamSelection.get());
+}
 
-    Parameter* manualTrigger = getProcessor()->getParameter("manual_trigger");
-    addCustomParameterEditor(new ManualTriggerButton(manualTrigger), 60, 95);
+void UDPEventsPluginEditor::updateSettings()
+{
+    // Present each stream by string and associate each with its numeric stream id.
+    streamSelection->clear();
+    for (auto stream : getProcessor()->getDataStreams())
+    {
+        streamSelection->addItem(stream->getName(), stream->getStreamId());
+    }
+
+    // Reconcile the current selection with what streams are actually available to select.
+    uint16 currentStreamId = (uint16)(int)getProcessor()->getParameter("data_stream")->getValue();
+    if (streamSelection->getNumItems() == 0)
+    {
+        // There are no streams!
+        currentStreamId = 0;
+    }
+    else if (streamSelection->indexOfItemId(currentStreamId) == -1)
+    {
+        // Default to selecting the first available stream.
+        currentStreamId = streamSelection->getItemId(0);
+    }
+
+    if (currentStreamId > 0)
+    {
+        // Trigger callbacks for the selected stream.
+        streamSelection->setSelectedId(currentStreamId, sendNotification);
+    }
+}
+
+void UDPEventsPluginEditor::comboBoxChanged(ComboBox *cb)
+{
+    if (cb == streamSelection.get())
+    {
+        // Propagate the selected stream to the processor's int parameter.
+        uint16 currentStreamId = cb->getSelectedId();
+        if (currentStreamId > 0)
+        {
+            getProcessor()->getParameter("data_stream")->setNextValue(currentStreamId);
+        }
+    }
+}
+
+void UDPEventsPluginEditor::startAcquisition()
+{
+    // Disable changing stream during acquisition.
+    streamSelection->setEnabled(false);
+}
+
+void UDPEventsPluginEditor::stopAcquisition()
+{
+    // Enable changing stream between acquisitions.
+    streamSelection->setEnabled(true);
 }
