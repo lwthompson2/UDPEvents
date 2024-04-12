@@ -27,11 +27,15 @@ UDPEventsPluginEditor::UDPEventsPluginEditor(GenericProcessor *parentNode)
     : GenericEditor(parentNode)
 {
     desiredWidth = 200;
-    addComboBoxParameterEditor("sync_line", 10, 25);
+    addTextBoxParameterEditor("host", 10, 25);
+    addTextBoxParameterEditor("port", 100, 25);
+
+    addComboBoxParameterEditor("line", 10, 75);
 
     // Select stream with options updated dynamically.
     streamSelection = std::make_unique<ComboBox>("Stream Selector");
-    streamSelection->setBounds(10, 75, 155, 20);
+    streamSelection->setName("stream");
+    streamSelection->setBounds(100, 90, 75, 20);
     streamSelection->addListener(this);
     addAndMakeVisible(streamSelection.get());
 }
@@ -46,7 +50,7 @@ void UDPEventsPluginEditor::updateSettings()
     }
 
     // Reconcile the current selection with what streams are actually available to select.
-    uint16 currentStreamId = (uint16)(int)getProcessor()->getParameter("data_stream")->getValue();
+    uint16 currentStreamId = (uint16)(int)getProcessor()->getParameter("stream")->getValue();
     if (streamSelection->getNumItems() == 0)
     {
         // There are no streams!
@@ -73,7 +77,7 @@ void UDPEventsPluginEditor::comboBoxChanged(ComboBox *cb)
         uint16 currentStreamId = cb->getSelectedId();
         if (currentStreamId > 0)
         {
-            getProcessor()->getParameter("data_stream")->setNextValue(currentStreamId);
+            getProcessor()->getParameter("stream")->setNextValue(currentStreamId);
         }
     }
 }

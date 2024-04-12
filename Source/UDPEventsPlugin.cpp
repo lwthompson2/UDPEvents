@@ -32,13 +32,30 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 UDPEventsPlugin::UDPEventsPlugin()
     : GenericProcessor("UDP Events"), Thread("UDP Events Thread")
 {
+    // Host address to bind for listening.
+    addStringParameter(Parameter::GLOBAL_SCOPE,
+                       "host",
+                       "Host address to bind for receiving UDP messages.",
+                       "127.0.0.1",
+                       true);
+
+    // Host port to bind for listening.
+    addIntParameter(Parameter::GLOBAL_SCOPE,
+                    "port",
+                    "Host port to bind for receiving UDP messages.",
+                    12345,
+                    0,
+                    65535,
+                    true);
+
     // Id of data stream to filter.
     addIntParameter(Parameter::GLOBAL_SCOPE,
-                    "data_stream",
+                    "stream",
                     "Which data stream to filter",
                     0,
                     0,
-                    65535);
+                    65535,
+                    true);
 
     // Real TTL line to use for sync events.
     StringArray syncLines;
@@ -47,25 +64,58 @@ UDPEventsPlugin::UDPEventsPlugin()
         syncLines.add(String(i));
     }
     addCategoricalParameter(Parameter::GLOBAL_SCOPE,
-                            "sync_line",
-                            "Real TTL sync line",
+                            "line",
+                            "TTL line number where real sync events will occur",
                             syncLines,
-                            0);
-
-    // Start listening for UDP messages and enqueueing soft events.
-    // TODO: should this be tied to start/stop acquire rather than construct / destruct?
-    startThread();
+                            0,
+                            false);
 }
 
 UDPEventsPlugin::~UDPEventsPlugin()
 {
-    // TODO: should this be tied to start/stop acquire rather than construct / destruct?
+}
+
+AudioProcessorEditor *UDPEventsPlugin::createEditor()
+{
+    editor = std::make_unique<UDPEventsPluginEditor>(this);
+    return editor.get();
+}
+
+void UDPEventsPlugin::parameterValueChanged(Parameter *param)
+{
+    if (param->getName().equalsIgnoreCase("host"))
+    {
+        hostToBind = param->getValueAsString();
+    }
+    else if (param->getName().equalsIgnoreCase("port"))
+    {
+        portToBind = (uint16)(int)param->getValue();
+    }
+    else if (param->getName().equalsIgnoreCase("stream"))
+    {
+        streamId = (uint16)(int)param->getValue();
+    }
+    else if (param->getName().equalsIgnoreCase("line"))
+    {
+        syncLine = (uint8)(int)param->getValue();
+    }
+}
+
+bool UDPEventsPlugin::startAcquisition()
+{
+    // Start listening for UDP messages and enqueueing soft events.
+    startThread();
+    return isThreadRunning();
+}
+
+bool UDPEventsPlugin::stopAcquisition()
+{
     if (!stopThread(1000))
     {
-        // The thread should not take long to exit, so somethign must be wrong!
-        jassertfalse;
-        LOGE("UDP Events Thread stop timeout, forcing termination -- things might be unstable going forward.");
+        LOGE("UDP Events Thread timed out when trying ot stop.  Forcing termination, so things might be unstable going forward.");
+        return false;
     }
+    return true;
 }
 
 void UDPEventsPlugin::run()
@@ -93,7 +143,13 @@ void UDPEventsPlugin::run()
         return;
     }
 
-    LOGD("UDP Events Thread is ready at address: ", hostToBind, " port: ", portToBind);
+    sockaddr_in boundAddress;
+    socklen_t boundNameLength = sizeof(boundAddress);
+    getsockname(socket, (struct sockaddr *)&boundAddress, &boundNameLength);
+    uint16_t boundPort = ntohs(boundAddress.sin_port);
+    char boundHost[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &boundAddress.sin_addr, boundHost, sizeof(boundHost));
+    LOGD("UDP Events Thread is ready to receive at address: ", boundHost, " port: ", boundPort);
 
     // Sleep until a message arrives.
     // Wake up every 100ms to remain responsive to exit requests.
@@ -165,44 +221,7 @@ void UDPEventsPlugin::run()
     LOGD("UDP Events Thread is stopping.");
 }
 
-AudioProcessorEditor *UDPEventsPlugin::createEditor()
-{
-    editor = std::make_unique<UDPEventsPluginEditor>(this);
-    return editor.get();
-}
-
-void UDPEventsPlugin::parameterValueChanged(Parameter *param)
-{
-    if (param->getName().equalsIgnoreCase("data_stream"))
-    {
-        streamId = (uint16)(int)param->getValue();
-    }
-    else if (param->getName().equalsIgnoreCase("sync_line"))
-    {
-        syncLine = (int)param->getValue();
-    }
-}
-
-void UDPEventsPlugin::updateSettings()
-{
-    // Add a TTL event channel to each data stream.
-    // In process() handleTTLEvent() and below, we'll pick one stream using the users's selected streamId.
-    // We don't have access to this selection at the time when updateSettings() is called.
-    for (auto stream : dataStreams)
-    {
-        EventChannel::Settings ttlChannelSettings{
-            EventChannel::Type::TTL,
-            "UDP TTL Events",
-            "Soft TTL events added via UDP",
-            "udp.ttl.events",
-            stream};
-        EventChannel *ttlChannel = new EventChannel(ttlChannelSettings);
-        eventChannels.add(ttlChannel);
-        ttlChannel->addProcessor(processorInfo.get());
-    }
-}
-
-EventChannel *UDPEventsPlugin::getTTLChannel()
+EventChannel *UDPEventsPlugin::pickTTLChannel()
 {
     for (auto eventChannel : eventChannels)
     {
@@ -218,10 +237,8 @@ EventChannel *UDPEventsPlugin::getTTLChannel()
 void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
 {
 
-    // TODO: I think this synchronously calls back to handleTTLEvent() below.
-    // How does that fact inform how we form real-soft sync event twins?
-    // When/where to wait for the other twin?
-    // What if they arrive in different "process" blocks?
+    // This synchronously calls back to handleTTLEvent() below,
+    // Which can affect the syncState.
     checkForEvents();
 
     for (auto stream : dataStreams)
@@ -229,10 +246,18 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
         if (stream->getStreamId() == streamId)
         {
             // Process queued soft events into the selected stream.
-            EventChannel *ttlChannel = getTTLChannel();
+            EventChannel *ttlChannel = pickTTLChannel();
+            if (ttlChannel == nullptr)
+            {
+                // The selected stream has no events channel, nothing we can do.
+                break;
+            }
+
             {
                 ScopedLock TTLlock(softEventQueueLock);
-                while (!softEventQueue.empty())
+                // TODO: think about how to transition to ready in the first place!
+                // TODO: think about what to do with UDP events in front of the next soft sync event.
+                while (!softEventQueue.empty() && syncState.isReady())
                 {
                     const SoftEvent &softEvent = softEventQueue.front();
                     softEventQueue.pop();
@@ -241,16 +266,17 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                         // Got a soft "TTL" event.
                         if (softEvent.lineNumber == syncLine)
                         {
-                            // Stop consuming soft events here,
-                            // until pairing this with a real TTL event in handleTTLEvent().
-                            break;
+                            // Record a new soft event timestamp.
+                            // This can complete a new sync estimate,
+                            // or invalidate the previous estimate until a real ttl event arrives, maybe in the next process() block.
+                            syncState.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
                         }
                         else
                         {
                             // Put this TTL event into the selected stream.
-                            int64 softSampleNumber = softEvent.clientSeconds / stream->getSampleRate() + clientSampleZero;
+                            int64 sampleNumber = syncState.softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
                             TTLEventPtr ttlEvent = TTLEvent::createTTLEvent(ttlChannel,
-                                                                            softSampleNumber,
+                                                                            sampleNumber,
                                                                             softEvent.lineNumber,
                                                                             softEvent.lineState);
                             addEvent(ttlEvent, 0);
@@ -260,9 +286,9 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                     {
                         // Got a soft Text event.
                         // Best effort converting sample number here, even though Ephys currently ignores it for text!
-                        int64 softSampleNumber = softEvent.clientSeconds / stream->getSampleRate() + clientSampleZero;
+                        int64 sampleNumber = syncState.softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
                         TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
-                                                                            softSampleNumber,
+                                                                            sampleNumber,
                                                                             softEvent.text);
                         addEvent(textEvent, 0);
                     }
@@ -274,5 +300,17 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
 
 void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
-    // TODO: pair up a real TTL event on the syncLine with its soft event twin.
+    if (event->getLine() == syncLine)
+    {
+        for (auto stream : dataStreams)
+        {
+            if (stream->getStreamId() == streamId)
+            {
+                // Record a new sync event sample number.
+                // This can complete a new sync estimate,
+                // or invalidate the previous estimate until a soft timestmap arrives.
+                syncState.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
+            }
+        }
+    }
 }

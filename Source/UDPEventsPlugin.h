@@ -34,14 +34,14 @@ public:
 	/** The class destructor, used to deallocate memory */
 	~UDPEventsPlugin();
 
+	/** Start the background UDP thread. */
+	bool startAcquisition() override;
+
+	/** Stop the background UDP thread. */
+	bool stopAcquisition() override;
+
 	/** If the processor has a custom editor, this method must be defined to instantiate it. */
 	AudioProcessorEditor *createEditor() override;
-
-	/** Called every time the settings of an upstream plugin are changed.
-		Allows the processor to handle variations in the channel configuration or any other parameter
-		passed through signal chain. The processor can use this function to modify channel objects that
-		will be passed to downstream plugins. */
-	void updateSettings() override;
 
 	/** Defines the functionality of the processor.
 		The process method is called every time a new data buffer is available.
@@ -84,18 +84,85 @@ private:
 	std::queue<SoftEvent> softEventQueue;
 	CriticalSection softEventQueueLock;
 
-	/** Get the event channel we created for the given selected streamId. */
-	EventChannel *getTTLChannel();
+	/** Pick the first TTL event channel on the selected stream, if any. */
+	EventChannel *pickTTLChannel();
 
-	/** Estimate of which stream sample number corresponds to zero clientSeconds. */
-	int64 clientSampleZero = 0;
+	struct SyncState
+	{
+		/** Sample number of a real, local, sampled sync event. */
+		uint64 syncLocalSampleNumber = 0;
+
+		/** Timestamp of a corresponding soft, external sync event. */
+		double syncSoftSecs = 0.0;
+
+		/** Estimate of the local sample number that corresponds to soft timestamp 0.0.*/
+		uint64 softSampleZero = 0;
+
+		/** Sync state is ready to estimate when it has data from both local and soft sources. */
+		bool isReady()
+		{
+			return syncLocalSampleNumber != 0 && syncSoftSecs != 0.0;
+		}
+
+		/** Convert a soft, external timestamp to the nearest local sample number. */
+		int64 softSampleNumber(double softSecs, float localSampleRate)
+		{
+			return softSecs * localSampleRate + softSampleZero;
+		}
+
+		/** Record the latest sample number of a real sync event.
+		 * This will either invalidate the current sync estimate or complete the next sync estimate.
+		 */
+		void recordLocalSampleNumber(uint64 sampleNumber, float localSampleRate)
+		{
+			bool alreadyReady = isReady();
+			syncLocalSampleNumber = sampleNumber;
+
+			if (alreadyReady)
+			{
+				// This local sample number is for the next sync estimate,
+				// which won't be ready until the next soft timestamp arrives.
+				syncSoftSecs = 0.0;
+				LOGD("UDP Sync State transition to not ready, with new local sample number ", sampleNumber);
+			}
+			else if (syncSoftSecs != 0.0)
+			{
+				// This local sample number completes the next sync estimate going forward.
+				softSampleZero = syncLocalSampleNumber - syncSoftSecs * localSampleRate;
+				LOGD("UDP Sync State transition ready, with new local sample number ", sampleNumber);
+			}
+		}
+
+		/** Record the latest timestamp from a soft sync event.
+		 * This will either invalidate the current sync estimate or complete the next sync estimate.
+		 */
+		void recordSoftTimestamp(double softSecs, float localSampleRate)
+		{
+			bool alreadyReady = isReady();
+			syncSoftSecs = softSecs;
+
+			if (alreadyReady)
+			{
+				// This soft timestamp is for the next sync estimate,
+				// which won't be ready until the next local timestamp arrives.
+				syncLocalSampleNumber = 0;
+				LOGD("UDP Sync State transition to not ready, with new soft timestamp ", softSecs);
+			}
+			else if (syncLocalSampleNumber != 0)
+			{
+				// This soft timestamp completes the next sync estimate going forward.
+				softSampleZero = syncLocalSampleNumber - syncSoftSecs * localSampleRate;
+				LOGD("UDP Sync State transition to ready, with new soft timestamp ", softSecs);
+			}
+		}
+	};
+	SyncState syncState;
 
 	/** Editable settings.*/
-	uint16 streamId = 0;
-	int syncLine = 0;
-
 	String hostToBind = "127.0.0.1";
-    uint16_t portToBind = 12345;
+	uint16 portToBind = 12345;
+	uint16 streamId = 0;
+	uint8 syncLine = 0;
 };
 
 #endif
