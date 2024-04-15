@@ -59,7 +59,7 @@ UDPEventsPlugin::UDPEventsPlugin()
 
     // Real TTL line to use for sync events.
     StringArray syncLines;
-    for (int i = 1; i <= 64; i++)
+    for (int i = 1; i <= 256; i++)
     {
         syncLines.add(String(i));
     }
@@ -97,6 +97,9 @@ void UDPEventsPlugin::parameterValueChanged(Parameter *param)
     }
     else if (param->getName().equalsIgnoreCase("line"))
     {
+        // The UI presents 1-based line numbers 1-256.  The code here uses 0-based 0-255.
+        // I think the "get value" for this categorical parameter gives the selection index,
+        // which corresponds to the 0-based line number we want.
         syncLine = (uint8)(int)param->getValue();
     }
 }
@@ -176,7 +179,7 @@ void UDPEventsPlugin::run()
                 continue;
             }
 
-            // Record a timestamp close to when we got the message.
+            // Record a timestamp close to when we got the UDP message.
             double serverSecs = CoreServices::getSoftwareTimestamp() / CoreServices::getSoftwareSampleRate();
 
             // Process the message itself.
@@ -217,9 +220,11 @@ void UDPEventsPlugin::run()
                 // Acknowledge successful processing to the client.
                 int n_bytes = sendto(serverSocket, &serverSecs, 8, 0, reinterpret_cast<sockaddr *>(&clientAddress), sizeof(clientAddressLength));
             }
-
-            // This seems to be some unexpected message, and we'll ignore it.
-            LOGD("UDP Events Thread ignoring message of unknown type ", messageType, " and byte size ", bytesRead);
+            else
+            {
+                // This seems to be some unexpected message, and we'll ignore it.
+                LOGD("UDP Events Thread ignoring message of unknown type ", (int)messageType, " and byte size ", bytesRead);
+            }
         }
     }
 
@@ -271,35 +276,53 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                         if (softEvent.lineNumber == syncLine)
                         {
                             // This is a soft sync event corresponding to another, real TTL event.
+                            LOGD("HINGE");
                             bool completed = workingSync.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
                             if (completed)
                             {
                                 // The working sync has seen both a real and a soft event.
                                 // Add it to the sync history and start a new sync going forward.
+                                LOGD("WHINGE");
                                 syncEstimates.push_back(workingSync);
+                                LOGD("NYAK");
                                 workingSync.clear();
+                                LOGD("SLIRP");
                             }
                         }
                         else
                         {
-                            // This is a soft TTL event to add to the stream at the nearest local sample number.
+                            /**
+                             * This is a soft TTL event to add to the stream at the nearest local sample number.
+                             * We'll only add it if we're in a good sync state, otherwise we'll just drop it.
+                             * Indeed -- Open Ephys LFP Viewer crashes if we try to add a TTL with sample number 0.
+                             */
                             int64 sampleNumber = softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
-                            TTLEventPtr ttlEvent = TTLEvent::createTTLEvent(ttlChannel,
-                                                                            sampleNumber,
-                                                                            softEvent.lineNumber,
-                                                                            softEvent.lineState);
-                            addEvent(ttlEvent, 0);
+                            if (sampleNumber)
+                            {
+                                TTLEventPtr ttlEvent = TTLEvent::createTTLEvent(ttlChannel,
+                                                                                sampleNumber,
+                                                                                softEvent.lineNumber,
+                                                                                softEvent.lineState);
+                                addEvent(ttlEvent, 0);
+                            }
                         }
                     }
                     else if (softEvent.type == 2)
                     {
-                        // This is a Text message.
-                        // Best effort converting sample number here, even though Ephys currently ignores it for text!
+                        /**
+                         * This is a Text message to add to the stream.
+                         * We'll only add it if we're in a good sync state, otherwise we'll just drop it.
+                         * Unfortunately, Open Ephys will "round down" Text message timing to the start of the current processing block.
+                         * But we'll still make a best effort to compute the sample number from what we know.
+                         */
                         int64 sampleNumber = softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
-                        TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
-                                                                            sampleNumber,
-                                                                            softEvent.text);
-                        addEvent(textEvent, 0);
+                        if (sampleNumber)
+                        {
+                            TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
+                                                                                sampleNumber,
+                                                                                softEvent.text);
+                            addEvent(textEvent, 0);
+                        }
                     }
                 }
             }
@@ -326,6 +349,11 @@ int64 UDPEventsPlugin::softSampleNumber(double softSecs, float localSampleRate)
 
 void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
+
+    LOGD("UDP Events want TTL ", (int)syncLine, " handle ", event->getSampleNumber(), " ", (int)event->getLine(), " ", event->getState());
+
+    // The UI presents 1-based line numbers 1-256.
+    // Here in the code we are expecting 0-based 0-255 to fit within data type uint8.
     if (event->getLine() == syncLine)
     {
         // This is a real TTL event corresponding to another, soft TTL event.
@@ -333,13 +361,17 @@ void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
         {
             if (stream->getStreamId() == streamId)
             {
+                LOGD("BOOGER");
                 bool completed = workingSync.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
                 if (completed)
                 {
                     // The working sync has seen both a real and a soft event.
                     // Add it to the sync history and start a new sync going forward.
+                    LOGD("SUGAR");
                     syncEstimates.push_back(workingSync);
+                    LOGD("PLIM");
                     workingSync.clear();
+                    LOGD("DERP");
                 }
             }
         }

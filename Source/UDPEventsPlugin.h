@@ -75,7 +75,7 @@ private:
 		/** High-precision timestamp from the client's point of view. */
 		double clientSeconds = 0.0;
 
-		/** Line number for TTL events. */
+		/** 0-based line number for TTL events. */
 		uint8 lineNumber = 0;
 
 		/** On/off state for TTL events (nonzero means "on"). */
