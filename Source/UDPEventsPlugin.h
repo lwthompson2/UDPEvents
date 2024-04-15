@@ -34,14 +34,20 @@ public:
 	/** The class destructor, used to deallocate memory */
 	~UDPEventsPlugin();
 
+	/** If the processor has a custom editor, this method must be defined to instantiate it. */
+	AudioProcessorEditor *createEditor() override;
+
+	/** Update internal variables in respons selections made in the editor UI. */
+	void parameterValueChanged(Parameter *param) override;
+
 	/** Start the background UDP thread. */
 	bool startAcquisition() override;
 
 	/** Stop the background UDP thread. */
 	bool stopAcquisition() override;
 
-	/** If the processor has a custom editor, this method must be defined to instantiate it. */
-	AudioProcessorEditor *createEditor() override;
+	/** Check for UDP messages on a separate thread. */
+	void run() override;
 
 	/** Defines the functionality of the processor.
 		The process method is called every time a new data buffer is available.
@@ -53,13 +59,13 @@ public:
 		the plugin's process() method */
 	void handleTTLEvent(TTLEventPtr event) override;
 
-	/** Update internal variables in respons selections made in the editor UI. */
-	void parameterValueChanged(Parameter *param) override;
-
-	/** Check for UDP messages on a separate thread. */
-	void run() override;
-
 private:
+	/** Editable settings.*/
+	String hostToBind = "127.0.0.1";
+	uint16 portToBind = 12345;
+	uint16 streamId = 0;
+	uint8 syncLine = 0;
+
 	/** Hold events received via UDP, until processing them into the selected data stream. */
 	struct SoftEvent
 	{
@@ -87,9 +93,10 @@ private:
 	/** Pick the first TTL event channel on the selected stream, if any. */
 	EventChannel *pickTTLChannel();
 
-	struct SyncState
+	/** Keep track of real and soft sync events and convert client soft secs to local sample numbers. */
+	struct SyncEstimate
 	{
-		/** Sample number of a real, local, sampled sync event. */
+		/** Sample number of a real, local, sampled, sync event. */
 		uint64 syncLocalSampleNumber = 0;
 
 		/** Timestamp of a corresponding soft, external sync event. */
@@ -98,10 +105,12 @@ private:
 		/** Estimate of the local sample number that corresponds to soft timestamp 0.0.*/
 		uint64 softSampleZero = 0;
 
-		/** Sync state is ready to estimate when it has data from both local and soft sources. */
-		bool isReady()
+		/** Reset and begin a new estimate. */
+		void clear()
 		{
-			return syncLocalSampleNumber != 0 && syncSoftSecs != 0.0;
+			syncLocalSampleNumber = 0;
+			syncSoftSecs = 0.0;
+			softSampleZero = 0;
 		}
 
 		/** Convert a soft, external timestamp to the nearest local sample number. */
@@ -111,58 +120,42 @@ private:
 		}
 
 		/** Record the latest sample number of a real sync event.
-		 * This will either invalidate the current sync estimate or complete the next sync estimate.
+		 * Return whether or not the sync estimate is now complete.
 		 */
-		void recordLocalSampleNumber(uint64 sampleNumber, float localSampleRate)
+		bool recordLocalSampleNumber(uint64 sampleNumber, float localSampleRate)
 		{
-			bool alreadyReady = isReady();
 			syncLocalSampleNumber = sampleNumber;
-
-			if (alreadyReady)
-			{
-				// This local sample number is for the next sync estimate,
-				// which won't be ready until the next soft timestamp arrives.
-				syncSoftSecs = 0.0;
-				LOGD("UDP Sync State transition to not ready, with new local sample number ", sampleNumber);
-			}
-			else if (syncSoftSecs != 0.0)
+			if (syncSoftSecs)
 			{
 				// This local sample number completes the next sync estimate going forward.
 				softSampleZero = syncLocalSampleNumber - syncSoftSecs * localSampleRate;
-				LOGD("UDP Sync State transition ready, with new local sample number ", sampleNumber);
+				return true;
 			}
+			return false;
 		}
 
 		/** Record the latest timestamp from a soft sync event.
-		 * This will either invalidate the current sync estimate or complete the next sync estimate.
+		 * Return whether or not the sync estimate is now complete.
 		 */
-		void recordSoftTimestamp(double softSecs, float localSampleRate)
+		bool recordSoftTimestamp(double softSecs, float localSampleRate)
 		{
-			bool alreadyReady = isReady();
 			syncSoftSecs = softSecs;
-
-			if (alreadyReady)
-			{
-				// This soft timestamp is for the next sync estimate,
-				// which won't be ready until the next local timestamp arrives.
-				syncLocalSampleNumber = 0;
-				LOGD("UDP Sync State transition to not ready, with new soft timestamp ", softSecs);
-			}
-			else if (syncLocalSampleNumber != 0)
+			if (syncLocalSampleNumber)
 			{
 				// This soft timestamp completes the next sync estimate going forward.
 				softSampleZero = syncLocalSampleNumber - syncSoftSecs * localSampleRate;
-				LOGD("UDP Sync State transition to ready, with new soft timestamp ", softSecs);
+				return true;
 			}
+			return false;
 		}
 	};
-	SyncState syncState;
+	SyncEstimate workingSync;
+	std::list<SyncEstimate> syncEstimates;
 
-	/** Editable settings.*/
-	String hostToBind = "127.0.0.1";
-	uint16 portToBind = 12345;
-	uint16 streamId = 0;
-	uint8 syncLine = 0;
+	/** Convert a soft, external timestamp to the nearest local sample number,
+	 * using the most relevant / contemporary sync estimate.
+	 */
+	int64 softSampleNumber(double softSecs, float localSampleRate);
 };
 
 #endif

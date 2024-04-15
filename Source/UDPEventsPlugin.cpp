@@ -103,7 +103,6 @@ void UDPEventsPlugin::parameterValueChanged(Parameter *param)
 
 bool UDPEventsPlugin::startAcquisition()
 {
-    // Start listening for UDP messages and enqueueing soft events.
     startThread();
     return isThreadRunning();
 }
@@ -123,38 +122,39 @@ void UDPEventsPlugin::run()
     LOGD("UDP Events Thread is starting.");
 
     // Create a new UDP socket to receive on.
-    int socket = ::socket(AF_INET, SOCK_DGRAM, 0);
-    if (socket < 0)
+    int serverSocket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (serverSocket < 0)
     {
-        LOGE("UDP Events Thread could not create a socket: ", socket, " errno: ", errno);
+        LOGE("UDP Events Thread could not create a socket: ", serverSocket, " errno: ", errno);
         return;
     }
 
-    // Bind the local address and port so we can receive and act as a server.
+    // Bind the local address and port so we can receive, as a server.
     sockaddr_in addressToBind;
     addressToBind.sin_family = AF_INET;
     addressToBind.sin_port = htons(portToBind);
     addressToBind.sin_addr.s_addr = inet_addr(hostToBind.toUTF8());
-    int bindResult = bind(socket, (struct sockaddr *)&addressToBind, sizeof(addressToBind));
+    int bindResult = bind(serverSocket, (struct sockaddr *)&addressToBind, sizeof(addressToBind));
     if (bindResult < 0)
     {
-        close(socket);
+        close(serverSocket);
         LOGE("UDP Events Thread could not bind socket to address: ", hostToBind, " port: ", portToBind, " errno: ", errno);
         return;
     }
 
+    // Report the address and port we bound (can be assigned by system).
     sockaddr_in boundAddress;
     socklen_t boundNameLength = sizeof(boundAddress);
-    getsockname(socket, (struct sockaddr *)&boundAddress, &boundNameLength);
+    getsockname(serverSocket, (struct sockaddr *)&boundAddress, &boundNameLength);
     uint16_t boundPort = ntohs(boundAddress.sin_port);
     char boundHost[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &boundAddress.sin_addr, boundHost, sizeof(boundHost));
     LOGD("UDP Events Thread is ready to receive at address: ", boundHost, " port: ", boundPort);
 
-    // Sleep until a message arrives.
+    // Configure to sleep until a message arrives.
     // Wake up every 100ms to remain responsive to exit requests.
     struct pollfd toPoll[1];
-    toPoll[0].fd = socket;
+    toPoll[0].fd = serverSocket;
     toPoll[0].events = POLLIN;
     int pollTimeoutMs = 100;
 
@@ -169,55 +169,62 @@ void UDPEventsPlugin::run()
         int numReady = poll(toPoll, 1, pollTimeoutMs);
         if (numReady > 0 && toPoll[0].revents & POLLIN)
         {
-            int bytesRead = recvfrom(socket, messageBuffer, messageBufferSize - 1, 0, (struct sockaddr *)&clientAddress, &clientAddressLength);
+            int bytesRead = recvfrom(serverSocket, messageBuffer, messageBufferSize - 1, 0, (struct sockaddr *)&clientAddress, &clientAddressLength);
             if (bytesRead <= 0)
             {
                 LOGE("UDP Events Thread had a read error.  Bytes read: ", bytesRead, " errno: ", errno);
                 continue;
             }
 
-            // Process the next message.
+            // Record a timestamp close to when we got the message.
+            double serverSecs = CoreServices::getSoftwareTimestamp() / CoreServices::getSoftwareSampleRate();
+
+            // Process the message itself.
             uint8 messageType = (uint8)messageBuffer[0];
             if (messageType == 1)
             {
-                // Got a TTL message.
-                SoftEvent event;
-                event.type = 1;
-                event.clientSeconds = *((double *)(messageBuffer + 1));
-                event.lineNumber = (uint8)messageBuffer[9];
-                event.lineState = (uint8)messageBuffer[10];
+                // This is a TTL message.
+                SoftEvent ttlEvent;
+                ttlEvent.type = 1;
+                ttlEvent.clientSeconds = *((double *)(messageBuffer + 1));
+                ttlEvent.lineNumber = (uint8)messageBuffer[9];
+                ttlEvent.lineState = (uint8)messageBuffer[10];
+
+                // Add to our queue to be handled below, on the main thread, in process().
                 {
                     ScopedLock TTLlock(softEventQueueLock);
-                    softEventQueue.push(event);
+                    softEventQueue.push(ttlEvent);
                 }
+
+                // Acknowledge successful processing to the client.
+                int n_bytes = sendto(serverSocket, &serverSecs, 8, 0, reinterpret_cast<sockaddr *>(&clientAddress), sizeof(clientAddressLength));
             }
             else if (messageType == 2)
             {
-                // Got a Text message.
-                SoftEvent event;
-                event.type = 2;
-                event.clientSeconds = *((double *)(messageBuffer + 1));
-                event.textLength = *((uint16 *)(messageBuffer + 9));
-                event.text = String::fromUTF8(messageBuffer + 10, event.textLength);
+                // This is a Text message.
+                SoftEvent textEvent;
+                textEvent.type = 2;
+                textEvent.clientSeconds = *((double *)(messageBuffer + 1));
+                textEvent.textLength = *((uint16 *)(messageBuffer + 9));
+                textEvent.text = String::fromUTF8(messageBuffer + 10, textEvent.textLength);
+
+                // Add to our queue to be handled below, on the main thread, in process().
                 {
                     ScopedLock TTLlock(softEventQueueLock);
-                    softEventQueue.push(event);
+                    softEventQueue.push(textEvent);
                 }
-            }
-            else
-            {
-                // Got some other message, ignore it.
-                LOGD("UDP Events Thread ignoring message of unknown type ", messageType, " and byte size ", bytesRead);
-                continue;
+
+                // Acknowledge successful processing to the client.
+                int n_bytes = sendto(serverSocket, &serverSecs, 8, 0, reinterpret_cast<sockaddr *>(&clientAddress), sizeof(clientAddressLength));
             }
 
-            // Acknowledge the message with a timestamp.
-            double serverSecs = CoreServices::getSoftwareTimestamp() / CoreServices::getSoftwareSampleRate();
-            int n_bytes = sendto(socket, &serverSecs, 8, 0, reinterpret_cast<sockaddr *>(&clientAddress), sizeof(clientAddressLength));
+            // This seems to be some unexpected message, and we'll ignore it.
+            LOGD("UDP Events Thread ignoring message of unknown type ", messageType, " and byte size ", bytesRead);
         }
     }
 
-    close(socket);
+    // Main loop has exited, clean up and let the UDP thread terminate.
+    close(serverSocket);
     LOGD("UDP Events Thread is stopping.");
 }
 
@@ -236,9 +243,7 @@ EventChannel *UDPEventsPlugin::pickTTLChannel()
 
 void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
 {
-
-    // This synchronously calls back to handleTTLEvent() below,
-    // Which can affect the syncState.
+    // This synchronously calls back to handleTTLEvent(), below.
     checkForEvents();
 
     for (auto stream : dataStreams)
@@ -253,28 +258,32 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                 break;
             }
 
+            // Work through any messages enqueued above, by run() on the UDP Thread.
             {
                 ScopedLock TTLlock(softEventQueueLock);
-                // TODO: think about how to transition to ready in the first place!
-                // TODO: think about what to do with UDP events in front of the next soft sync event.
-                while (!softEventQueue.empty() && syncState.isReady())
+                while (!softEventQueue.empty())
                 {
                     const SoftEvent &softEvent = softEventQueue.front();
                     softEventQueue.pop();
                     if (softEvent.type == 1)
                     {
-                        // Got a soft "TTL" event.
+                        // This is a TTL message.
                         if (softEvent.lineNumber == syncLine)
                         {
-                            // Record a new soft event timestamp.
-                            // This can complete a new sync estimate,
-                            // or invalidate the previous estimate until a real ttl event arrives, maybe in the next process() block.
-                            syncState.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
+                            // This is a soft sync event corresponding to another, real TTL event.
+                            bool completed = workingSync.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
+                            if (completed)
+                            {
+                                // The working sync has seen both a real and a soft event.
+                                // Add it to the sync history and start a new sync going forward.
+                                syncEstimates.push_back(workingSync);
+                                workingSync.clear();
+                            }
                         }
                         else
                         {
-                            // Put this TTL event into the selected stream.
-                            int64 sampleNumber = syncState.softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
+                            // This is a soft TTL event to add to the stream at the nearest local sample number.
+                            int64 sampleNumber = softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
                             TTLEventPtr ttlEvent = TTLEvent::createTTLEvent(ttlChannel,
                                                                             sampleNumber,
                                                                             softEvent.lineNumber,
@@ -284,9 +293,9 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                     }
                     else if (softEvent.type == 2)
                     {
-                        // Got a soft Text event.
+                        // This is a Text message.
                         // Best effort converting sample number here, even though Ephys currently ignores it for text!
-                        int64 sampleNumber = syncState.softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
+                        int64 sampleNumber = softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
                         TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
                                                                             sampleNumber,
                                                                             softEvent.text);
@@ -298,18 +307,40 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
     }
 }
 
+int64 UDPEventsPlugin::softSampleNumber(double softSecs, float localSampleRate)
+{
+    // Look for the last completed sync estimate whose syncSoftSecs preceeds the given softSecs.
+    for (auto current = syncEstimates.rbegin(); current != syncEstimates.rend(); ++current)
+    {
+        if (current->syncSoftSecs <= softSecs)
+        {
+            // Found the most relevant sync estimate.
+            return current->softSampleNumber(softSecs, localSampleRate);
+        }
+    }
+
+    // No relevant sync estimates.
+    LOGD("UDP Events has no good sync estimate preceeding client soft secs: ", softSecs);
+    return 0;
+}
+
 void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
     if (event->getLine() == syncLine)
     {
+        // This is a real TTL event corresponding to another, soft TTL event.
         for (auto stream : dataStreams)
         {
             if (stream->getStreamId() == streamId)
             {
-                // Record a new sync event sample number.
-                // This can complete a new sync estimate,
-                // or invalidate the previous estimate until a soft timestmap arrives.
-                syncState.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
+                bool completed = workingSync.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
+                if (completed)
+                {
+                    // The working sync has seen both a real and a soft event.
+                    // Add it to the sync history and start a new sync going forward.
+                    syncEstimates.push_back(workingSync);
+                    workingSync.clear();
+                }
             }
         }
     }
