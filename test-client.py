@@ -4,36 +4,53 @@ import time
 
 import zmq
 
-# TODO: bind a local port to get replies from UDP Events server.
-
-zmq_destination = ("127.0.0.1", 5556)
+# Connect to the UDP Events plugin at this address and port.
 udp_destination = ("127.0.0.1", 12345)
+
+# Bind this address and port to receive ACK messages from the UDP Events plugin.
+udp_local_bind = ("127.0.0.1", 12344)
+
+# Connect to the Network Events plugin, using ZMQ, at this address and port.
+zmq_destination = ("127.0.0.1", 5556)
+
+# Send both "real" and "soft" TTL events on this line number.
 sync_line_number = 3
 
+# Send other TTL events on this line number.
+# These will be inserted into an existing Open Ephys data stream with high-precision timestamps.
 extra_line_number = 0
 
+# What time did this script start running?
 start_time = time.time()
+
+
+# Take local timestamps relative to when the script started running.
 def up_time():
     return time.time() - start_time
 
 
+# Connect a ZMQ socket to the Network Events plugin.
 with zmq.Context() as zmq_context:
     with zmq_context.socket(zmq.REQ) as zmq_socket:
         zmq_socket.connect('tcp://%s:%d' % (zmq_destination))
+        print("Connected ZMQ socket.")
 
-        print("made zmq socket")
-
+        # Connect a plain UDP socket to the UDP Events plugin.
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
 
-            print("made udp socket")
+            udp_socket.bind(udp_local_bind)
+            print("Bound UDP socket.")
 
+            # Send 10 groups of messages over about 10 seconds.
             for index in range(10):
 
                 time.sleep(0.75)
 
-                # Sync messages, like the start of a trial.
+                # Start with a pair of TTL messages on the sync line, as if starting a trial.
+                # These allow us to insert soft messages with local timestamps into an Open Ephys data stream with high precision timestamps.
 
-                # Pack a ZMQ events TTL message.
+                # First, a "real" TTL event sent to the Network Events plugin.
+                # In real life this event should come from an acquisition card.
                 # The Open Ephys UI presents 1-based line numbers 1-256.
                 # In the code (ours and Open Ephys!) we use 0-based line numbers 0-255.
                 # These fit naturally into a uint8.
@@ -41,7 +58,7 @@ with zmq.Context() as zmq_context:
                 # And subtracts 1 from what it receives in TTL messages ¯\_(ツ)_/¯
                 zmq_sync_message = f"TTL Line={sync_line_number + 1} State={index % 2}"
                 zmq_socket.send_string(zmq_sync_message)
-                print(zmq_socket.recv_string())
+                print("ZMQ reply: " + zmq_socket.recv_string())
 
                 # Pack a UDP Events TTL message.
                 udp_sync_message = bytearray(11)
@@ -51,7 +68,7 @@ with zmq.Context() as zmq_context:
                 struct.pack_into('B', udp_sync_message, 10, index % 2)
 
                 bytes_sent = udp_socket.sendto(udp_sync_message, udp_destination)
-                print(f"TTL: sent {bytes_sent} message bytes")
+                print("UDP reply: " + str(struct.unpack('d', udp_socket.recvfrom(256)[0])[0]))
 
                 # Other messages, like trial data.
 
@@ -66,7 +83,7 @@ with zmq.Context() as zmq_context:
                 udp_text_message[11:11+len(text_bytes)] = text_bytes
 
                 bytes_sent = udp_socket.sendto(udp_text_message, udp_destination)
-                print(f"Text: sent {bytes_sent} message bytes")
+                print("UDP reply: " + str(struct.unpack('d', udp_socket.recvfrom(256)[0])[0]))
 
                 # Pack more UDP Events TTL message in quick succession.
                 # These should get recorded with sub-"block" precision...
@@ -84,3 +101,7 @@ with zmq.Context() as zmq_context:
                 struct.pack_into('B', udp_extra_off, 9, extra_line_number)
                 struct.pack_into('B', udp_extra_off, 10, 0)
                 bytes_sent = udp_socket.sendto(udp_extra_off, udp_destination)
+
+                # Replies can stack up in the socket queue until we read them.
+                print("UDP reply: " + str(struct.unpack('d', udp_socket.recvfrom(256)[0])[0]))
+                print("UDP reply: " + str(struct.unpack('d', udp_socket.recvfrom(256)[0])[0]))

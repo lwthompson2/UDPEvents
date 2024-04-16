@@ -26,20 +26,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <poll.h>
 
 #include "UDPEventsPlugin.h"
-
 #include "UDPEventsPluginEditor.h"
 
 UDPEventsPlugin::UDPEventsPlugin()
     : GenericProcessor("UDP Events"), Thread("UDP Events Thread")
 {
-    // Host address to bind for listening.
+    // Host address to bind for receiving as a server.
     addStringParameter(Parameter::GLOBAL_SCOPE,
                        "host",
                        "Host address to bind for receiving UDP messages.",
                        "127.0.0.1",
                        true);
 
-    // Host port to bind for listening.
+    // Host port to bind for receiving as a server.
     addIntParameter(Parameter::GLOBAL_SCOPE,
                     "port",
                     "Host port to bind for receiving UDP messages.",
@@ -97,19 +96,20 @@ void UDPEventsPlugin::parameterValueChanged(Parameter *param)
     }
     else if (param->getName().equalsIgnoreCase("line"))
     {
-        // The UI presents 1-based line numbers 1-256.  The code here uses 0-based 0-255.
-        // I think the "get value" for this categorical parameter gives the selection index,
-        // which corresponds to the 0-based line number we want.
+        // The UI presents 1-based line numbers 1-256 but internal code uses 0-based 0-255.
+        // Looks like getValue() for a categorical parameter gives the selection index.
+        // Because of how we set up the categories above, selection index works as the 0-based line number.
         syncLine = (uint8)(int)param->getValue();
     }
 }
 
 bool UDPEventsPlugin::startAcquisition()
 {
-    /** Start with fresh sync estimates every time.*/
+    /** Start with fresh sync estimates each acquisition.*/
     workingSync.clear();
     syncEstimates.clear();
 
+    /** UDP socket and buffer lifecycle will match GUI acquisition periods. */
     startThread();
     return isThreadRunning();
 }
@@ -132,7 +132,7 @@ void UDPEventsPlugin::run()
     int serverSocket = socket(AF_INET, SOCK_DGRAM, 0);
     if (serverSocket < 0)
     {
-        LOGE("UDP Events Thread could not create a socket: ", serverSocket, " errno: ", errno);
+        LOGE("UDP Events Thread could not create a socket: ", serverSocket, " errno: ", errno, " -- ", strerror(errno));
         return;
     }
 
@@ -145,11 +145,11 @@ void UDPEventsPlugin::run()
     if (bindResult < 0)
     {
         close(serverSocket);
-        LOGE("UDP Events Thread could not bind socket to address: ", hostToBind, " port: ", portToBind, " errno: ", errno);
+        LOGE("UDP Events Thread could not bind socket to address: ", hostToBind, " port: ", portToBind, " errno: ", errno, " -- ", strerror(errno));
         return;
     }
 
-    // Report the address and port we bound (can be assigned by system).
+    // Report the address and port we bound (it might have been assigned by system).
     sockaddr_in boundAddress;
     socklen_t boundNameLength = sizeof(boundAddress);
     getsockname(serverSocket, (struct sockaddr *)&boundAddress, &boundNameLength);
@@ -158,15 +158,14 @@ void UDPEventsPlugin::run()
     inet_ntop(AF_INET, &boundAddress.sin_addr, boundHost, sizeof(boundHost));
     LOGD("UDP Events Thread is ready to receive at address: ", boundHost, " port: ", boundPort);
 
-    // Configure to sleep until a message arrives.
-    // Wake up every 100ms to remain responsive to exit requests.
+    // Configure to sleep until a message arrives, but wake every 100ms to be responsive to exit requests.
     struct pollfd toPoll[1];
     toPoll[0].fd = serverSocket;
     toPoll[0].events = POLLIN;
     int pollTimeoutMs = 100;
 
     // Read the client's address and message text into local buffers.
-    socklen_t clientAddress;
+    sockaddr_in clientAddress;
     socklen_t clientAddressLength = sizeof(clientAddress);
     size_t messageBufferSize = 65536;
     char messageBuffer[messageBufferSize] = {0};
@@ -179,12 +178,27 @@ void UDPEventsPlugin::run()
             int bytesRead = recvfrom(serverSocket, messageBuffer, messageBufferSize - 1, 0, (struct sockaddr *)&clientAddress, &clientAddressLength);
             if (bytesRead <= 0)
             {
-                LOGE("UDP Events Thread had a read error.  Bytes read: ", bytesRead, " errno: ", errno);
+                LOGE("UDP Events Thread had a read error.  Bytes read: ", bytesRead, " errno: ", errno, " -- ", strerror(errno));
                 continue;
             }
 
             // Record a timestamp close to when we got the UDP message.
-            double serverSecs = CoreServices::getSoftwareTimestamp() / CoreServices::getSoftwareSampleRate();
+            double serverSecs = (double)CoreServices::getSoftwareTimestamp() / CoreServices::getSoftwareSampleRate();
+
+            // Who sent us this message?
+            uint16_t clientPort = ntohs(clientAddress.sin_port);
+            char clientHost[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &clientAddress.sin_addr, clientHost, sizeof(clientHost));
+            LOGD("UDP Events Thread received ", bytesRead, " bytes from host: ", clientHost, " port: ", clientPort);
+
+            // Acknowledge message receipt to the client.
+            int bytesWritten = sendto(serverSocket, &serverSecs, 8, 0, reinterpret_cast<const sockaddr *>(&clientAddress), clientAddressLength);
+            if (bytesWritten < 0)
+            {
+                LOGE("UDP Events Thread had a write error.  Bytes written: ", bytesWritten, " errno: ", errno, " -- ", strerror(errno));
+                continue;
+            }
+            LOGD("UDP Events Thread sent ", bytesWritten, " bytes to host: ", clientHost, " port: ", clientPort);
 
             // Process the message itself.
             uint8 messageType = (uint8)messageBuffer[0];
@@ -197,16 +211,11 @@ void UDPEventsPlugin::run()
                 ttlEvent.lineNumber = (uint8)messageBuffer[9];
                 ttlEvent.lineState = (uint8)messageBuffer[10];
 
-                LOGD("UDP Events Thread got TTL message ", ttlEvent.clientSeconds, " ", (int)ttlEvent.lineNumber, " ", (int)ttlEvent.lineState);
-
-                // Add to our queue to be handled below, on the main thread, in process().
+                // Enqueue this to be handled below, on the main thread, in process().
                 {
                     ScopedLock TTLlock(softEventQueueLock);
                     softEventQueue.push(ttlEvent);
                 }
-
-                // Acknowledge successful processing to the client.
-                int n_bytes = sendto(serverSocket, &serverSecs, 8, 0, reinterpret_cast<sockaddr *>(&clientAddress), sizeof(clientAddressLength));
             }
             else if (messageType == 2)
             {
@@ -215,28 +224,24 @@ void UDPEventsPlugin::run()
                 textEvent.type = 2;
                 textEvent.clientSeconds = *((double *)(messageBuffer + 1));
                 textEvent.textLength = ntohs(*((uint16 *)(messageBuffer + 9)));
-                textEvent.text = String::fromUTF8(messageBuffer + 11, textEvent.textLength);
+                String text = String::fromUTF8(messageBuffer + 11, textEvent.textLength);
+                textEvent.text = text + "@" + String(textEvent.clientSeconds);
 
-                LOGD("UDP Events Thread got Text message ", textEvent.clientSeconds, " ", (int)textEvent.textLength, " <", textEvent.text, ">");
-
-                // Add to our queue to be handled below, on the main thread, in process().
+                // Enqueue this to be handled below, on the main thread, in process().
                 {
                     ScopedLock TTLlock(softEventQueueLock);
                     softEventQueue.push(textEvent);
                 }
-
-                // Acknowledge successful processing to the client.
-                int n_bytes = sendto(serverSocket, &serverSecs, 8, 0, reinterpret_cast<sockaddr *>(&clientAddress), sizeof(clientAddressLength));
             }
             else
             {
                 // This seems to be some unexpected message, and we'll ignore it.
-                LOGD("UDP Events Thread ignoring message of unknown type ", (int)messageType, " and byte size ", bytesRead);
+                LOGE("UDP Events Thread ignoring message of unknown type ", (int)messageType, " and byte size ", bytesRead);
             }
         }
     }
 
-    // Main loop has exited, clean up and let the UDP thread terminate.
+    // The main loop has exited so we're done, so clean up and let the UDP thread terminate.
     close(serverSocket);
     LOGD("UDP Events Thread is stopping.");
 }
@@ -250,7 +255,6 @@ EventChannel *UDPEventsPlugin::pickTTLChannel()
             return eventChannel;
         }
     }
-    LOGD("UDPEventsPlugin could not find ttl event channel for streamId ", streamId);
     return nullptr;
 }
 
@@ -259,19 +263,20 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
     // This synchronously calls back to handleTTLEvent(), below.
     checkForEvents();
 
+
+    // Find the selected data stream.
     for (auto stream : dataStreams)
     {
         if (stream->getStreamId() == streamId)
         {
-            // Process queued soft events into the selected stream.
+            // Find a TTL channel for the selected data stream.
             EventChannel *ttlChannel = pickTTLChannel();
             if (ttlChannel == nullptr)
             {
-                // The selected stream has no events channel, nothing we can do.
-                break;
+                return;
             }
 
-            // Work through any messages enqueued above, by run() on the UDP Thread.
+            // Work through soft messages enqueued above, by run() on the UDP Thread.
             {
                 ScopedLock TTLlock(softEventQueueLock);
                 while (!softEventQueue.empty())
@@ -283,9 +288,9 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                         // This is a TTL message.
                         if (softEvent.lineNumber == syncLine)
                         {
-                            // This is a soft sync event corresponding to another, real TTL event.
-                            bool completed = workingSync.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
-                            if (completed)
+                            // This is a soft sync event corresponding to a real TTL event.
+                            bool syncComplete = workingSync.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
+                            if (syncComplete)
                             {
                                 // The working sync has seen both a real and a soft event.
                                 // Add it to the sync history and start a new sync going forward.
@@ -295,14 +300,11 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                         }
                         else
                         {
-                            /**
-                             * This is a soft TTL event to add to the stream at the nearest local sample number.
-                             * We'll only add it if we're in a good sync state, otherwise we'll just drop it.
-                             * Indeed -- Open Ephys LFP Viewer crashes if we try to add a TTL with sample number 0.
-                             */
+                            // This is a soft TTL event to add to the selected stream.
                             int64 sampleNumber = softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
                             if (sampleNumber)
                             {
+                                // We'll only add it if we can find a previous sync estimate.
                                 TTLEventPtr ttlEvent = TTLEvent::createTTLEvent(ttlChannel,
                                                                                 sampleNumber,
                                                                                 softEvent.lineNumber,
@@ -313,15 +315,13 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                     }
                     else if (softEvent.type == 2)
                     {
-                        /**
-                         * This is a Text message to add to the stream.
-                         * We'll only add it if we're in a good sync state, otherwise we'll just drop it.
-                         * Unfortunately, Open Ephys will "round down" Text message timing to the start of the current processing block.
-                         * But we'll still make a best effort to compute the sample number from what we know.
-                         */
+                        // This is a Text message to add to the selected stream.
                         int64 sampleNumber = softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
                         if (sampleNumber)
                         {
+                            // We'll only add it if we can find a previous sync estimate.
+                            // For now, Open Ephys ignores the sampleNumber we pass for text events.
+                            // But we can still do our best effort!
                             TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
                                                                                 sampleNumber,
                                                                                 softEvent.text);
@@ -336,18 +336,18 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
 
 int64 UDPEventsPlugin::softSampleNumber(double softSecs, float localSampleRate)
 {
-    // Look for the last completed sync estimate whose syncSoftSecs preceeds the given softSecs.
+    // Look for the last completed sync estimate preceeding the given softSecs.
     for (auto current = syncEstimates.rbegin(); current != syncEstimates.rend(); ++current)
     {
         if (current->syncSoftSecs <= softSecs)
         {
-            // Found the most relevant sync estimate.
+            // This is the most relevant sync estimate.
             return current->softSampleNumber(softSecs, localSampleRate);
         }
     }
 
     // No relevant sync estimates.
-    LOGD("UDP Events has no good sync estimate preceeding client soft secs: ", softSecs);
+    LOGE("UDP Events has no good sync estimate preceeding client soft secs: ", softSecs);
     return 0;
 }
 
@@ -355,7 +355,7 @@ void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
     if (event->getLine() == syncLine)
     {
-        // This is a real TTL event corresponding to another, soft TTL event.
+        // This real TTL event should corredspond to a soft TTL event.
         for (auto stream : dataStreams)
         {
             if (stream->getStreamId() == streamId)

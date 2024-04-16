@@ -121,16 +121,13 @@ private:
 			return sampleNumber;
 		}
 
-		/** Record the latest sample number of a real sync event.
-		 * Return whether or not the sync estimate is now complete.
-		 */
+		/** Record the sample number of a real sync event, return whether the sync estimate is now complete. */
 		bool recordLocalSampleNumber(int64 sampleNumber, float localSampleRate)
 		{
 			syncLocalSampleNumber = sampleNumber;
 			LOGD("SyncEstimate got syncLocalSampleNumber ", (long)sampleNumber, " at localSampleRate ", localSampleRate);
 			if (syncSoftSecs)
 			{
-				// This local sample number completes the next sync estimate going forward.
 				softSampleZero = syncLocalSampleNumber - syncSoftSecs * localSampleRate;
 				LOGD("SyncEstimate computed softSampleZero ", (long)softSampleZero);
 				return true;
@@ -138,16 +135,13 @@ private:
 			return false;
 		}
 
-		/** Record the latest timestamp from a soft sync event.
-		 * Return whether or not the sync estimate is now complete.
-		 */
+		/** Record the timestamp of a soft sync event, return whether the sync estimate is now complete. */
 		bool recordSoftTimestamp(double softSecs, float localSampleRate)
 		{
 			syncSoftSecs = softSecs;
 			LOGD("SyncEstimate got syncSoftSecs ", syncSoftSecs, " at localSampleRate ", localSampleRate);
 			if (syncLocalSampleNumber)
 			{
-				// This soft timestamp completes the next sync estimate going forward.
 				softSampleZero = syncLocalSampleNumber - syncSoftSecs * localSampleRate;
 				LOGD("SyncEstimate computed softSampleZero ", (long)softSampleZero);
 				return true;
@@ -158,9 +152,7 @@ private:
 	SyncEstimate workingSync;
 	std::list<SyncEstimate> syncEstimates;
 
-	/** Convert a soft, external timestamp to the nearest local sample number,
-	 * using the most relevant / contemporary sync estimate.
-	 */
+	/** Convert a soft timestamp to the nearest local sample number using the most relevant sync estimate. */
 	int64 softSampleNumber(double softSecs, float localSampleRate);
 };
 
