@@ -97,13 +97,13 @@ private:
 	struct SyncEstimate
 	{
 		/** Sample number of a real, local, sampled, sync event. */
-		uint64 syncLocalSampleNumber = 0;
+		int64 syncLocalSampleNumber = 0;
 
 		/** Timestamp of a corresponding soft, external sync event. */
 		double syncSoftSecs = 0.0;
 
 		/** Estimate of the local sample number that corresponds to soft timestamp 0.0.*/
-		uint64 softSampleZero = 0;
+		int64 softSampleZero = 0;
 
 		/** Reset and begin a new estimate. */
 		void clear()
@@ -116,19 +116,23 @@ private:
 		/** Convert a soft, external timestamp to the nearest local sample number. */
 		int64 softSampleNumber(double softSecs, float localSampleRate)
 		{
-			return softSecs * localSampleRate + softSampleZero;
+			int64 sampleNumber = softSecs * localSampleRate + softSampleZero;
+			LOGD("SyncEstimate computed sampleNumber ", (long)sampleNumber, " for softSecs ", softSecs, " at localSampleRate ", localSampleRate);
+			return sampleNumber;
 		}
 
 		/** Record the latest sample number of a real sync event.
 		 * Return whether or not the sync estimate is now complete.
 		 */
-		bool recordLocalSampleNumber(uint64 sampleNumber, float localSampleRate)
+		bool recordLocalSampleNumber(int64 sampleNumber, float localSampleRate)
 		{
 			syncLocalSampleNumber = sampleNumber;
+			LOGD("SyncEstimate got syncLocalSampleNumber ", (long)sampleNumber, " at localSampleRate ", localSampleRate);
 			if (syncSoftSecs)
 			{
 				// This local sample number completes the next sync estimate going forward.
 				softSampleZero = syncLocalSampleNumber - syncSoftSecs * localSampleRate;
+				LOGD("SyncEstimate computed softSampleZero ", (long)softSampleZero);
 				return true;
 			}
 			return false;
@@ -140,10 +144,12 @@ private:
 		bool recordSoftTimestamp(double softSecs, float localSampleRate)
 		{
 			syncSoftSecs = softSecs;
+			LOGD("SyncEstimate got syncSoftSecs ", syncSoftSecs, " at localSampleRate ", localSampleRate);
 			if (syncLocalSampleNumber)
 			{
 				// This soft timestamp completes the next sync estimate going forward.
 				softSampleZero = syncLocalSampleNumber - syncSoftSecs * localSampleRate;
+				LOGD("SyncEstimate computed softSampleZero ", (long)softSampleZero);
 				return true;
 			}
 			return false;

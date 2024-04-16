@@ -106,6 +106,10 @@ void UDPEventsPlugin::parameterValueChanged(Parameter *param)
 
 bool UDPEventsPlugin::startAcquisition()
 {
+    /** Start with fresh sync estimates every time.*/
+    workingSync.clear();
+    syncEstimates.clear();
+
     startThread();
     return isThreadRunning();
 }
@@ -193,6 +197,8 @@ void UDPEventsPlugin::run()
                 ttlEvent.lineNumber = (uint8)messageBuffer[9];
                 ttlEvent.lineState = (uint8)messageBuffer[10];
 
+                LOGD("UDP Events Thread got TTL message ", ttlEvent.clientSeconds, " ", (int)ttlEvent.lineNumber, " ", (int)ttlEvent.lineState);
+
                 // Add to our queue to be handled below, on the main thread, in process().
                 {
                     ScopedLock TTLlock(softEventQueueLock);
@@ -208,8 +214,10 @@ void UDPEventsPlugin::run()
                 SoftEvent textEvent;
                 textEvent.type = 2;
                 textEvent.clientSeconds = *((double *)(messageBuffer + 1));
-                textEvent.textLength = *((uint16 *)(messageBuffer + 9));
-                textEvent.text = String::fromUTF8(messageBuffer + 10, textEvent.textLength);
+                textEvent.textLength = ntohs(*((uint16 *)(messageBuffer + 9)));
+                textEvent.text = String::fromUTF8(messageBuffer + 11, textEvent.textLength);
+
+                LOGD("UDP Events Thread got Text message ", textEvent.clientSeconds, " ", (int)textEvent.textLength, " <", textEvent.text, ">");
 
                 // Add to our queue to be handled below, on the main thread, in process().
                 {
@@ -276,17 +284,13 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                         if (softEvent.lineNumber == syncLine)
                         {
                             // This is a soft sync event corresponding to another, real TTL event.
-                            LOGD("HINGE");
                             bool completed = workingSync.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
                             if (completed)
                             {
                                 // The working sync has seen both a real and a soft event.
                                 // Add it to the sync history and start a new sync going forward.
-                                LOGD("WHINGE");
                                 syncEstimates.push_back(workingSync);
-                                LOGD("NYAK");
                                 workingSync.clear();
-                                LOGD("SLIRP");
                             }
                         }
                         else
@@ -349,11 +353,6 @@ int64 UDPEventsPlugin::softSampleNumber(double softSecs, float localSampleRate)
 
 void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
-
-    LOGD("UDP Events want TTL ", (int)syncLine, " handle ", event->getSampleNumber(), " ", (int)event->getLine(), " ", event->getState());
-
-    // The UI presents 1-based line numbers 1-256.
-    // Here in the code we are expecting 0-based 0-255 to fit within data type uint8.
     if (event->getLine() == syncLine)
     {
         // This is a real TTL event corresponding to another, soft TTL event.
@@ -361,17 +360,13 @@ void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
         {
             if (stream->getStreamId() == streamId)
             {
-                LOGD("BOOGER");
                 bool completed = workingSync.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
                 if (completed)
                 {
                     // The working sync has seen both a real and a soft event.
                     // Add it to the sync history and start a new sync going forward.
-                    LOGD("SUGAR");
                     syncEstimates.push_back(workingSync);
-                    LOGD("PLIM");
                     workingSync.clear();
-                    LOGD("DERP");
                 }
             }
         }
