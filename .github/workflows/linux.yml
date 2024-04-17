@@ -41,7 +41,7 @@ jobs:
           zipfile=${plugin-name}_${new_plugin_ver}.zip
           zip -r -X $zipfile plugins shared
       - name: upload-artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: "*.zip"
-          path: Build
+          name: UDPEventsPlugin-Linux
+          path: Build/*.zip
