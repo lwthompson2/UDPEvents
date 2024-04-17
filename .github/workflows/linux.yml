@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - "*"
+env:
+  plugin-name: UDPEvents-linux
+  tag: "${{ github.ref_name }}"
 
 jobs:
   build-linux:
@@ -27,9 +30,6 @@ jobs:
           cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release ..
           make
       - name: package
-        env:
-          plugin-name: UDPEvents-linux
-          tag: "${{ github.ref_name }}"
         run: |
           plugin_api=$(grep -rnw ../../plugin-GUI/Source -e '#define PLUGIN_API_VER' | grep -Eo "[0-9]*" | tail -1)
           new_plugin_ver=$tag-API$plugin_api
@@ -40,5 +40,5 @@ jobs:
       - name: upload-artifact
         uses: actions/upload-artifact@v4
         with:
-          name: UDPEvents-linux
+          name: "${{ env.plugin-name }}-${{ env.tag }}"
           path: "*.zip"
