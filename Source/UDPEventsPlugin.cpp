@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <poll.h>
+#include <unistd.h>
 
 #include "UDPEventsPlugin.h"
 #include "UDPEventsPluginEditor.h"
