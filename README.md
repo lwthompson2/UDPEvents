@@ -1,3 +1,26 @@
+# Scratch notes real quick...
+
+Download a plugin artifact.
+Go to the latest build for your platform at the repo [actions](https://github.com/benjamin-heasly/UDPEvents/actions) page.
+Download the artifact with a name like `UDPEvents-linux_test-8-API8.zip` and unzip it.
+Copy the Linux `.so` or Windows `.dll` or macOS bundle file in there the Plugins folder of your Open Ephys installation.
+
+On my machine this looked like
+
+```
+sudo cp UDPEvents.so /usr/local/bin/open-ephys-gui/plugins/
+```
+
+Though, oddly, for some reason `/usr/local/bin/open-ephys-gui` was owned by the `docker` user.
+So first I had to fix the permissions to make them like other stuff in `/usr/local/bin/`.
+
+```
+sudo chown -R root:root /usr/local/bin/open-ephys-gui/
+```
+
+And then, UDP Events shows up in the plugin list and I can add it to a signal chain.
+And, I can test it with `text-client.py`.
+
 # Processor Plugin Template
 
 This repository contains a template for building **Processor** plugins for the [Open Ephys GUI](https://github.com/open-ephys/plugin-GUI). This is the most common type of plugin for the GUI, and makes it possible to add custom functionality to the signal chain.
