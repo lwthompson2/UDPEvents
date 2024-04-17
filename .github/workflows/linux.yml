@@ -35,10 +35,8 @@ jobs:
           new_plugin_ver=$tag-API$plugin_api
           mkdir plugins 
           cp -r Build/*.so plugins
-          mkdir shared	
-          cp -r libs/linux/bin/* shared
           zipfile=${plugin-name}_${new_plugin_ver}.zip
-          zip -r -X $zipfile plugins shared
+          zip -r -X $zipfile plugins
       - name: upload-artifact
         uses: actions/upload-artifact@v4
         with:
