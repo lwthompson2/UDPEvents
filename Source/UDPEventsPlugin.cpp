@@ -20,17 +20,12 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-// TODO: some winsock porting is necessarey after all
-// https://learn.microsoft.com/en-us/windows/win32/winsock/porting-socket-applications-to-winsock
-#ifdef WIN32
-#include <winsock2.h>
-#else
+// TODO: refactor socket operations around UDPUtils.h, instead of all these.
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <poll.h>
 #include <unistd.h>
-#endif
 
 #include "UDPEventsPlugin.h"
 #include "UDPEventsPluginEditor.h"
