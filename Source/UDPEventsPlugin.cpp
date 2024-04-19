@@ -140,7 +140,7 @@ void UDPEventsPlugin::run()
     int bindResult = udpBind(serverSocket, &addressToBind);
     if (bindResult < 0)
     {
-        close(serverSocket);
+        udpCloseSocket(serverSocket);
         LOGE("UDP Events Thread could not bind socket to address: ", hostToBind, " port: ", portToBind, " error: ", udpErrorMessage());
         return;
     }
