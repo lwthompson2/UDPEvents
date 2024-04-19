@@ -1,7 +1,7 @@
 # UDP Events
 
 This repo is for an [Open Ephys GUI](https://github.com/open-ephys/plugin-GUI) processor plugin.
-It's based on Open Ephys [processor plugin template](https://github.com/open-ephys-plugins/processor-plugin-template).
+It's based on the Open Ephys [processor plugin template](https://github.com/open-ephys-plugins/processor-plugin-template).
 For more info on Open Ephys and plugins in general, please see the [Open Ephys docs](https://open-ephys.github.io/gui-docs/Tutorials/How-To-Make-Your-Own-Plugin.html).
 
 This UDP Events plugin can be used to inject TTL and Text events into an existing Open Ephys data stream via a UDP network socket.
@@ -20,11 +20,11 @@ On the build results page, look for the "Artifacts" section. Download an artifac
 
 On Linux the `.zip` file contains a dynamic library file called `UDPEvents.so` file.  This is the plugin.
 
-Copy the `UDPEvents.so` into the `plugins/` subdir of your Open Ephys GUI installation.
+Copy `UDPEvents.so` into the `plugins/` subdir of your Open Ephys GUI installation.
 You might need to figure out where this is.
-For example, using the [official Ubuntu installer](https://open-ephys.github.io/gui-docs/User-Manual/Installing-the-GUI.html) this `plugins/` subdir ended up at `/usr/local/bin/open-ephys-gui/plugins/`.
+For example, using the [official Ubuntu installer](https://open-ephys.github.io/gui-docs/User-Manual/Installing-the-GUI.html#linux) this `plugins/` subdir ended up at `/usr/local/bin/open-ephys-gui/plugins/`.
 
-So a copy command like this shoudl work:
+So a copy command like this should work:
 
 ```
 sudo cp UDPEvents.so /usr/local/bin/open-ephys-gui/plugins/
