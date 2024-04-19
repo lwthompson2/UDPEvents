@@ -114,4 +114,4 @@ with zmq.Context() as zmq_context:
 
                 # Replies can stack up in the socket queue until we read them.
                 print("UDP TTL on reply: " + double_bytes_to_str(udp_socket.recvfrom(256)[0]))
-                print("UDP TTL on reply: " + double_bytes_to_str(udp_socket.recvfrom(256)[0]))
+                print("UDP TTL off reply: " + double_bytes_to_str(udp_socket.recvfrom(256)[0]))

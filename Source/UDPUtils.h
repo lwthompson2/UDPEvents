@@ -3,72 +3,50 @@
 
 /** Define several UDP socket operations to abstract us away from POSIX vs Winsock details. */
 
-// Represent a network address, somewhat like sockaddr_in, but with generic/convenient types.
-struct udpAddress
+/** Network IP v4 address and port that callers can allocate on the stack. */
+struct UdpAddress
 {
-    char* host;
-    short hostLength;
-    short port;
+    // String representation of the host name.
+    char hostName[16];
+
+    // Binary representation of the host name (required for send and receive).
+    unsigned long host;
+
+    // Port number using local host's byte ordering.
+    unsigned short port;
 };
 
-// Create a socket (and start socket system)
-// int serverSocket = socket(AF_INET, SOCK_DGRAM, 0);
-int openUdpSocket();
+/** Create a socket with an integer handle.  Start (increment) the socket system as needed. */
+int udpOpenSocket();
 
-// close an open socket (and clean up socket system)
-// close(serverSocket);
-void closeUdpSocket(int s);
+/** Close the given socket.  Clean up (decrement) the socket system as needed. */
+void udpCloseSocket(int s);
 
-// Get a socket error code and/or description.
-// errno
-// strerror(errno)
-// https://stackoverflow.com/questions/3400922/how-do-i-retrieve-an-error-string-from-wsagetlasterror
+/** Get a short description for the most recent socket error. */
 const char *udpErrorMessage();
 
-// Bind an address and port
-// sockaddr_in addressToBind;
-// addressToBind.sin_family = AF_INET;
-// addressToBind.sin_port = htons(portToBind);
-// addressToBind.sin_addr.s_addr = inet_addr(hostToBind.toUTF8());
-// int bindResult = bind(serverSocket, (struct sockaddr *)&addressToBind, sizeof(addressToBind));
-int bindUdpSocket(int s, udpAddress addressToBind);
+/** Bind the given socket to the given address.  Return negative on error. */
+int udpBind(int s, const struct UdpAddress *const address);
 
-// Inspect a socket's bound address and port
-// sockaddr_in boundAddress;
-// socklen_t boundNameLength = sizeof(boundAddress);
-// getsockname(serverSocket, (struct sockaddr *)&boundAddress, &boundNameLength);
-// uint16_t boundPort = ntohs(boundAddress.sin_port);
-// char boundHost[INET_ADDRSTRLEN];
-// inet_ntop(AF_INET, &boundAddress.sin_addr, boundHost, sizeof(boundHost));
-void inspectUdpSocket(int s, udpAddress *address);
+/** Get the address a socket was bound to (which could have been assigned by the system). */
+void udpGetAddress(int s, struct UdpAddress *const address);
 
-// Sleep for a timeout until data arrives.
-// struct pollfd toPoll[1];
-// toPoll[0].fd = serverSocket;
-// toPoll[0].events = POLLIN;
-// int pollTimeoutMs = 100;
-// ...
-// int numReady = poll(toPoll, 1, pollTimeoutMs);
-// if (numReady > 0 && toPoll[0].revents & POLLIN)
-bool awaitUdpMessage(int s, int timeoutMs);
+/** Convert an addres host's binary representation to a string name. */
+void udpHostBinToName(struct UdpAddress *const address);
 
-// Receive from an unconnected client and inspect their address.
-// sockaddr_in clientAddress;
-// socklen_t clientAddressLength = sizeof(clientAddress);
-// size_t messageBufferSize = 65536;
-// char messageBuffer[messageBufferSize] = {0};
-// ...
-// int bytesRead = recvfrom(serverSocket, messageBuffer, messageBufferSize - 1, 0, (struct sockaddr *)&clientAddress, &clientAddressLength);
-// ...
-// Inspect an unconnected client's address.
-// uint16_t clientPort = ntohs(clientAddress.sin_port);
-// char clientHost[INET_ADDRSTRLEN];
-// inet_ntop(AF_INET, &clientAddress.sin_addr, clientHost, sizeof(clientHost));
-int receiveUdpFrom(int s, udpAddress *clientAddress, char * message, int messageLength);
+/** Convert an address host's string name to binary representation. */
+void udpHostNameToBin(struct UdpAddress *const address);
 
-// Send to an unconnected client
-// int bytesWritten = sendto(serverSocket, &serverSecs, 8, 0, reinterpret_cast<const sockaddr *>(&clientAddress), clientAddressLength);
-int sendUdpTo(int s, udpAddress clientAddress, const char * message, int messageLength);
+/** Sleep until a message arrives, up to the given timeout ms.  Return true if a message did arrive. */
+bool udpAwaitMessage(int s, int timeoutMs);
 
+/** Read one message from an unconnected client.  Fill in the given address for the client and return the number of bytes read. */
+int udpReceiveFrom(int s, struct UdpAddress *const address, void *message, int messageLength);
+
+/** Send a message to the given unconnected client's address, return the number of bytes written. */
+int udpSendTo(int s, const struct UdpAddress *const address, const void *message, int messageLength);
+
+/** Convert a 16-bit unsigned integer from netowrk to host byte order. */
+short unsigned int udpNToHS(short unsigned int netInt);
 
 #endif

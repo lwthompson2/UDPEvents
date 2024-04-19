@@ -20,15 +20,9 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-// TODO: refactor socket operations around UDPUtils.h, instead of all these.
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <poll.h>
-#include <unistd.h>
-
 #include "UDPEventsPlugin.h"
 #include "UDPEventsPluginEditor.h"
+#include "UDPUtils.h"
 
 UDPEventsPlugin::UDPEventsPlugin()
     : GenericProcessor("UDP Events"), Thread("UDP Events Thread")
@@ -131,56 +125,45 @@ void UDPEventsPlugin::run()
     LOGD("UDP Events Thread is starting.");
 
     // Create a new UDP socket to receive on.
-    int serverSocket = socket(AF_INET, SOCK_DGRAM, 0);
+    int serverSocket = udpOpenSocket();
     if (serverSocket < 0)
     {
-        LOGE("UDP Events Thread could not create a socket: ", serverSocket, " errno: ", errno, " -- ", strerror(errno));
+        LOGE("UDP Events Thread error creating socket: ", udpErrorMessage());
         return;
     }
 
     // Bind the local address and port so we can receive, as a server.
-    sockaddr_in addressToBind;
-    addressToBind.sin_family = AF_INET;
-    addressToBind.sin_port = htons(portToBind);
-    addressToBind.sin_addr.s_addr = inet_addr(hostToBind.toUTF8());
-    int bindResult = bind(serverSocket, (struct sockaddr *)&addressToBind, sizeof(addressToBind));
+    struct UdpAddress addressToBind;
+    addressToBind.port = portToBind;
+    hostToBind.copyToUTF8(addressToBind.hostName, sizeof(addressToBind.hostName));
+    udpHostNameToBin(&addressToBind);
+    int bindResult = udpBind(serverSocket, &addressToBind);
     if (bindResult < 0)
     {
         close(serverSocket);
-        LOGE("UDP Events Thread could not bind socket to address: ", hostToBind, " port: ", portToBind, " errno: ", errno, " -- ", strerror(errno));
+        LOGE("UDP Events Thread could not bind socket to address: ", hostToBind, " port: ", portToBind, " error: ", udpErrorMessage());
         return;
     }
 
-    // Report the address and port we bound (it might have been assigned by system).
-    sockaddr_in boundAddress;
-    socklen_t boundNameLength = sizeof(boundAddress);
-    getsockname(serverSocket, (struct sockaddr *)&boundAddress, &boundNameLength);
-    uint16_t boundPort = ntohs(boundAddress.sin_port);
-    char boundHost[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &boundAddress.sin_addr, boundHost, sizeof(boundHost));
-    LOGD("UDP Events Thread is ready to receive at address: ", boundHost, " port: ", boundPort);
+    // Report the address and port we actually bound (they might have been assigned by system).
+    struct UdpAddress boundAddress;
+    udpGetAddress(serverSocket, &boundAddress);
+    udpHostBinToName(&boundAddress);
+    LOGD("UDP Events Thread is ready to receive at address: ", boundAddress.hostName, " port: ", boundAddress.port);
 
-    // Configure to sleep until a message arrives, but wake every 100ms to be responsive to exit requests.
-    struct pollfd toPoll[1];
-    toPoll[0].fd = serverSocket;
-    toPoll[0].events = POLLIN;
-    int pollTimeoutMs = 100;
-
-    // Read the client's address and message text into local buffers.
-    sockaddr_in clientAddress;
-    socklen_t clientAddressLength = sizeof(clientAddress);
-    size_t messageBufferSize = 65536;
-    char messageBuffer[messageBufferSize] = {0};
+    // Read the client addresses and messages text into local buffers.
+    struct UdpAddress clientAddress;
+    char messageBuffer[65536] = {0};
     while (!threadShouldExit())
     {
-        // Sleep until a message arrives.
-        int numReady = poll(toPoll, 1, pollTimeoutMs);
-        if (numReady > 0 && toPoll[0].revents & POLLIN)
+        // Wait for a message to arrive, but wake every 100ms to remain responsive to exit requests.
+        bool messageArrived = udpAwaitMessage(serverSocket, 100);
+        if (messageArrived)
         {
-            int bytesRead = recvfrom(serverSocket, messageBuffer, messageBufferSize - 1, 0, (struct sockaddr *)&clientAddress, &clientAddressLength);
+            int bytesRead = udpReceiveFrom(serverSocket, &clientAddress, messageBuffer, sizeof(messageBuffer));
             if (bytesRead <= 0)
             {
-                LOGE("UDP Events Thread had a read error.  Bytes read: ", bytesRead, " errno: ", errno, " -- ", strerror(errno));
+                LOGE("UDP Events Thread had a read error.  Bytes read: ", bytesRead, " error: ", udpErrorMessage());
                 continue;
             }
 
@@ -188,19 +171,17 @@ void UDPEventsPlugin::run()
             double serverSecs = (double)CoreServices::getSoftwareTimestamp() / CoreServices::getSoftwareSampleRate();
 
             // Who sent us this message?
-            uint16_t clientPort = ntohs(clientAddress.sin_port);
-            char clientHost[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &clientAddress.sin_addr, clientHost, sizeof(clientHost));
-            LOGD("UDP Events Thread received ", bytesRead, " bytes from host: ", clientHost, " port: ", clientPort);
+            udpHostBinToName(&clientAddress);
+            LOGD("UDP Events Thread received ", bytesRead, " bytes from host: ", clientAddress.hostName, " port: ", clientAddress.port);
 
             // Acknowledge message receipt to the client.
-            int bytesWritten = sendto(serverSocket, &serverSecs, 8, 0, reinterpret_cast<const sockaddr *>(&clientAddress), clientAddressLength);
+            int bytesWritten = udpSendTo(serverSocket, &clientAddress, &serverSecs, 8);
             if (bytesWritten < 0)
             {
-                LOGE("UDP Events Thread had a write error.  Bytes written: ", bytesWritten, " errno: ", errno, " -- ", strerror(errno));
+                LOGE("UDP Events Thread had a write error.  Bytes written: ", bytesWritten, " error: ", udpErrorMessage());
                 continue;
             }
-            LOGD("UDP Events Thread sent ", bytesWritten, " bytes to host: ", clientHost, " port: ", clientPort);
+            LOGD("UDP Events Thread sent ", bytesWritten, " bytes to host: ", clientAddress.hostName, " port: ", clientAddress.port);
 
             // Process the message itself.
             uint8 messageType = (uint8)messageBuffer[0];
@@ -225,7 +206,7 @@ void UDPEventsPlugin::run()
                 SoftEvent textEvent;
                 textEvent.type = 2;
                 textEvent.clientSeconds = *((double *)(messageBuffer + 1));
-                textEvent.textLength = ntohs(*((uint16 *)(messageBuffer + 9)));
+                textEvent.textLength = udpNToHS(*((uint16 *)(messageBuffer + 9)));
                 String text = String::fromUTF8(messageBuffer + 11, textEvent.textLength);
                 textEvent.text = text + "@" + String(textEvent.clientSeconds);
 
@@ -244,7 +225,7 @@ void UDPEventsPlugin::run()
     }
 
     // The main loop has exited so we're done, so clean up and let the UDP thread terminate.
-    close(serverSocket);
+    udpCloseSocket(serverSocket);
     LOGD("UDP Events Thread is stopping.");
 }
 
@@ -264,7 +245,6 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
 {
     // This synchronously calls back to handleTTLEvent(), below.
     checkForEvents();
-
 
     // Find the selected data stream.
     for (auto stream : dataStreams)
