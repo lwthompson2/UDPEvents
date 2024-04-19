@@ -32,15 +32,15 @@ sudo cp UDPEvents.so /usr/local/bin/open-ephys-gui/plugins/
 
 ### subdir ownership
 
-For some reason, on my/Ben's laptop `/usr/local/bin/open-ephys-gui` was owned by the `docker` user.
+For some reason, on my (Ben's) laptop the installed `/usr/local/bin/open-ephys-gui` was owned by the `docker` user.
 Was this a weird quirk of the Open Ephys installer?
-Either way, I also had to fix the ownership of the subdir like the rest of `/usr/local/bin/`.
+Either way, I also had to fix the ownership of the subdir to make it like the rest of `/usr/local/bin/`.
 
 ```
 sudo chown -R root:root /usr/local/bin/open-ephys-gui/
 ```
 
-After fixing that, the copy command above worked fine, and I could launch `open-ephys` and see "UDP Events" along with other plugins, and add it to a signal chain.
+After fixing that, the copy command above worked fine.  I could launch `open-ephys` and see "UDP Events" along with other plugins, and add it to a signal chain.
 
 ## Integrating with clients
 
@@ -56,8 +56,8 @@ As each message arrives, UDP Events will:
 The ack timestamps are informational only.
 Clients can use them to check that they are connecting to UDP Events as expected, and can expect that the timesamps will increase over time.
 
-Each event should arrive in a single UDP message, with binary data in one of two formats, with details below.
-For a working example client in Python, see [test-client.py](./test-client.py)
+Each event should arrive as a single UDP message with binary data in one of two formats, details below.
+For a working example client in Python, see [test-client.py](./test-client.py) in this repo.
 
 ### TTL Events
 
@@ -66,7 +66,7 @@ TTL event messages should have exactly 11 bytes:
 | byte index | number of bytes | data type | description |
 | --- | --- | --- | --- |
 | 0 | 1 | uint8 | **message type** for TTL messages this is the literal value `0x01` |
-| 1 | 8 | double | **timestamp** event time in seconds from the client's point of view |
+| 1 | 8 | double | **timestamp** event time in seconds (including fractions) from the client's point of view |
 | 9 | 1 | uint8 | **line number** 0-based line number for an Open Ephys TTL line (0-255) |
 | 10 | 1 | uint8 | **line state** on/off state for the Open Ephys TTL line (nonzero is "on") |
 
@@ -77,7 +77,7 @@ Text event messages should start with exactly 11 header bytes, followed by a var
 | byte index | number of bytes | data type | description |
 | --- | --- | --- | --- |
 | 0 | 1 | uint8 | **message type** for Text messages this is the literal value `0x02` |
-| 1 | 8 | double | **timestamp** event time in seconds from the client's point of view |
+| 1 | 8 | double | **timestamp** event time in seconds (including fractions) from the client's point of view |
 | 9 | 2 | uint16 | **text length** byte length of text that follows (network byte order -- use [htons()](https://beej.us/guide/bgnet/html/#htonsman)) |
 | 11 | **text length** | char | **text** message text encoded as ASCII or UTF-8 |
 
