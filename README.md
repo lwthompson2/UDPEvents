@@ -4,48 +4,76 @@ This repo is for an [Open Ephys GUI](https://github.com/open-ephys/plugin-GUI) p
 It's based on the Open Ephys [processor plugin template](https://github.com/open-ephys-plugins/processor-plugin-template).
 For more info on Open Ephys and plugins in general, please see the [Open Ephys docs](https://open-ephys.github.io/gui-docs/Tutorials/How-To-Make-Your-Own-Plugin.html).
 
-This UDP Events plugin can be used to inject TTL and Text events into an existing Open Ephys data stream via a UDP network socket.
-It can align "soft" timestamps from an external system to "real" sample numbers in the existing data stram with high precision.
+The UDP Events plugin can inject TTL and Text events into an existing Open Ephys data stream via a UDP network socket.
+It can align the "soft" timestamps from an external system to "real" sample numbers in the existing data stream.
+For TTL messages, the timestamp alignment can have high precision (more precise than Open Ephys data blocks).
 
+![UDP Events Editor](./udp-events-editor.png)
 
-## Downloading and installing
+UDP Events will bind a **HOST** address and **PORT** number where it can receive UDP messages.
 
-Here are some notes on how to get and install the plugin -- so far.  This is still a work in progress.
+It will look for real, upstream TTL events on a selected **LINE** and use these to align soft TTL and Text messages received via UDP.
+
+It will add aligned TTL and Text messages to a selected Open Ephys data stream, shown here as "**example_...**".
+
+## Downloading and Installing
 
 We're building the plugin for different platforms using GitHub Actions.
-Here's a Linux example, with Windows coming soon.
+To download a built plugin go to the latest build for your platform at this repo's [actions](https://github.com/benjamin-heasly/UDPEvents/actions) page.
 
-To download a built plugin go to the latest build for your platform at the repo [actions](https://github.com/benjamin-heasly/UDPEvents/actions) page.
-On the build results page, look for the "Artifacts" section. Download an artifact with a name like `UDPEvents-linux_test-8-API8.zip` and unzip it.
+On the latest build page, look for the "Artifacts" section.
+Download an artifact with a name like `UDPEvents-system_version-API8.zip` and unzip it.
 
-On Linux the `.zip` file contains a dynamic library file called `UDPEvents.so` file.  This is the plugin.
+### Linux
+
+On Linux the `.zip` file contains a dynamic library file called `UDPEvents.so`.
+This is the plugin.
 
 Copy `UDPEvents.so` into the `plugins/` subdir of your Open Ephys GUI installation.
 You might need to figure out where this is.
-For example, using the [official Ubuntu installer](https://open-ephys.github.io/gui-docs/User-Manual/Installing-the-GUI.html#linux) this `plugins/` subdir ended up at `/usr/local/bin/open-ephys-gui/plugins/`.
+For example, using the [official Ubuntu installer](https://open-ephys.github.io/gui-docs/User-Manual/Installing-the-GUI.html#linux) the `plugins/` subdir ended up at `/usr/local/bin/open-ephys-gui/plugins/`.
 
-So a copy command like this should work:
+So, a copy command like this should work:
 
 ```
 sudo cp UDPEvents.so /usr/local/bin/open-ephys-gui/plugins/
 ```
 
-### subdir ownership
+Once the plugin is copied over you should be able to launch `open-ephys` and see "UDP Events" listed along with other plugins.
 
-For some reason, on my (Ben's) laptop the installed `/usr/local/bin/open-ephys-gui` was owned by the `docker` user.
+#### subdir ownership
+
+For some reason, on one laptop, the installed `/usr/local/bin/open-ephys-gui` directory was owned by the `docker` user.
 Was this a weird quirk of the Open Ephys installer?
-Either way, I also had to fix the ownership of the subdir to make it like the rest of `/usr/local/bin/`.
+Regardless, you might need to fix the ownership of this directory make it like the rest of `/usr/local/bin/`.
 
 ```
 sudo chown -R root:root /usr/local/bin/open-ephys-gui/
 ```
 
-After fixing that, the copy command above worked fine.  I could launch `open-ephys` and see "UDP Events" along with other plugins, and add it to a signal chain.
+### Windows
 
-## Integrating with clients
+On Windows the `.zip` file contains a dynamic library file called `UDPEvents.dll`.
+This is the plugin.
 
-The UDP Events plugin will act like a server, starting and stopping whenever Open Ephys starts and stops acquisition.
-During acquisition UDP Events will bind a host address and UDP port and wait for messages to arrive from a client.
+Copy `UDPEvents.dll` into the `plugins/` subdir of your Open Ephys GUI installation.
+You might need to figure out where this is.
+A typical location might be:
+
+```
+C:\Program Files\Open Ephys\plugins
+```
+
+Once the plugin is copied over, you should be able to launch the Open Ephys GUI and see "UDP Events" listed along with other plugins.
+
+### macOS
+
+TODO...
+
+## Integrating with Clients
+
+The UDP Events plugin will act like a server that starts and stops whenever Open Ephys starts and stops acquisition.
+During acquisition UDP Events will bind its **HOST** address and UDP **PORT** and wait for messages to arrive from a client.
 As each message arrives, UDP Events will:
 
  - take a local timestamp
@@ -56,7 +84,7 @@ As each message arrives, UDP Events will:
 The ack timestamps are informational only.
 Clients can use them to check that they are connecting to UDP Events as expected, and can expect that the timesamps will increase over time.
 
-Each event should arrive as a single UDP message with binary data in one of two formats, details below.
+Clients should send events as a single UDP message each, with binary data in one of the two formats described below.
 For a working example client in Python, see [test-client.py](./test-client.py) in this repo.
 
 ### TTL Events
@@ -81,7 +109,7 @@ Text event messages should start with exactly 11 header bytes, followed by a var
 | 9 | 2 | uint16 | **text length** byte length of text that follows (network byte order -- use [htons()](https://beej.us/guide/bgnet/html/#htonsman)) |
 | 11 | **text length** | char | **text** message text encoded as ASCII or UTF-8 |
 
-### Ack timestamps
+### Ack Timestamps
 
 UDP Events will reply to the sender of each message with an 8-byte acknowledgement:
 
@@ -89,10 +117,42 @@ UDP Events will reply to the sender of each message with an 8-byte acknowledgeme
 | --- | --- | --- | --- |
 | 0 | 8 | double | **timestamp** ack time in seconds from the UDP Events point of view |
 
-## Aligning with an existing data stream
+## Data Stream Alignment
 
-UDP Events will align "soft" timestamps received in UDP messages to "real" sample numbers in a selected Open Ephys data stream.
-This alignment can preserve high precision in the sample numbers -- more precise than each Open Ephys data block.
-For this to work the client must send UDP TTL messages with the same **line number** as some existing TTL events on the selected stream.
+UDP Events will align soft timestamps received in UDP messages to real sample numbers in a selected Open Ephys data stream.
+The alignment can preserve high timing precision -- more precise than the start of each Open Ephys data block.
 
-TODO: more on this...
+### TTL Event Pairs
+
+For this alignment to work the client must send TTL Event messages via UDP with the same **LINE** number as a real, upstream TTL events on the same Open Ephys data stream.
+The soft timestamp for these TTL event messages should be the client's best estimate of when the real TTL event actually occurred, from the client's point of view.
+
+UDP Events will pair up TTL events on the same **LINE** -- one from UDP and one from upstream on the selected data stream.
+For each pair it will estimate and record a conversion from client soft timestamps to data stream sample numbers.
+
+As other TTL and Text events arrive via UDP, UDP Events will convert their soft timestamps to the closest sample number on the selected data stream, and add the events to the stream.
+
+### Accuracy
+
+Alignment accuracy will be limited by how well the client can measure when real TTL events actually occurred and report the measurements via UDP.
+So, UDP Events will make the most sense when the client has solid timing and control over both the UDP messages and the corresponding upstream events.
+
+Such a client could enrich a single DIO line with various other "soft TTL" and Text events.
+
+![UDP Events DIO Example](./udp-events-open-ephys.png)
+
+## Testing
+
+You can test UDP Events using a Python script like [test-client.py](./test-client.py) in this repo.
+This expects an Open Ephys signal chain with the following:
+
+ - [File Reader](https://open-ephys.github.io/gui-docs/User-Manual/Plugins/File-Reader.html) -- Sample data and a data stream to work with.
+ - [Network Events](https://open-ephys.github.io/gui-docs/User-Manual/Plugins/Network-Events.html) -- Create upstream TTL events for UDP Events to look for.
+ - UDP Events -- this plugin!
+ - [TTL Display Panel](https://open-ephys.github.io/gui-docs/User-Manual/Plugins/TTL-Panels.html) -- Blink as TTL events arrive.
+ - [LFP Viewer](https://open-ephys.github.io/gui-docs/User-Manual/Plugins/LFP-Viewer.html) -- Show TTL events aligned with upstream sample numbers.
+ - [Record Node](https://open-ephys.github.io/gui-docs/User-Manual/Plugins/Record-Node.html) -- Save data for detailed inspection.
+
+![UDP Events Test Signal Chain](./udp-events-test-signal-chain.png)
+
+In this testing setup, File Reader, Network Events, and [test-client.py](./test-client.py) are all working together to play the role of "client".
