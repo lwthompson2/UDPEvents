@@ -1,13 +1,10 @@
 /** Implement our UDPUtils for POSIX systems like Linux and macOS. */
 
-// https://web.archive.org/web/20140625123925/http://nadeausoftware.com/articles/2012/01/c_c_tip_how_use_compiler_predefined_macros_detect_operating_system#POSIX
-#if !defined(_WIN32) && (defined(__unix__) || defined(__unix) || (defined(__APPLE__) && defined(__MACH__)))
+#ifndef WIN32
 
-// We are on a Unix-style system.
+// Assume we are on a POSIX-compliant system.
+
 #include <unistd.h>
-#if defined(_POSIX_VERSION)
-
-// We are on a POSIX-compliant system.
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -99,5 +96,4 @@ short unsigned int udpNToHS(short unsigned int netInt)
     return ntohs(netInt);
 }
 
-#endif
 #endif

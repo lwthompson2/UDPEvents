@@ -8,8 +8,9 @@
  *
  */
 
-// https://web.archive.org/web/20140625123925/http://nadeausoftware.com/articles/2012/01/c_c_tip_how_use_compiler_predefined_macros_detect_operating_system#WindowsCygwinnonPOSIXandMinGW
-#if defined(_WIN32)
+#ifdef WIN32
+
+// Looks like we're on Windows.
 
 #include <stdio.h>
 #include <winsock2.h>
