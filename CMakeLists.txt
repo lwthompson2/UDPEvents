@@ -99,3 +99,6 @@ endforeach()
 #
 #target_link_libraries(${PLUGIN_NAME} ${LIBNAME_LIBRARIES})
 #target_include_directories(${PLUGIN_NAME} PRIVATE ${LIBNAME_INCLUDE_DIRS})
+
+# Temporarily make Windows headers available on linux (must install libwine-dev).
+#include_directories("/usr/include/wine/wine/windows")

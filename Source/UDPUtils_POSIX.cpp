@@ -70,7 +70,7 @@ bool udpAwaitMessage(int s, int timeoutMs)
     return numReady > 0 && toPoll[0].revents & POLLIN;
 }
 
-int udpReceiveFrom(int s, struct UdpAddress *const address, void *message, int messageLength)
+int udpReceiveFrom(int s, struct UdpAddress *const address, char *message, int messageLength)
 {
     struct sockaddr_in clientAddress;
     clientAddress.sin_family = AF_INET;
@@ -84,7 +84,7 @@ int udpReceiveFrom(int s, struct UdpAddress *const address, void *message, int m
     return bytesRead;
 }
 
-int udpSendTo(int s, const struct UdpAddress *const address, const void *message, int messageLength)
+int udpSendTo(int s, const struct UdpAddress *const address, const char *message, int messageLength)
 {
     struct sockaddr_in clientAddress;
     clientAddress.sin_family = AF_INET;

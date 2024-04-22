@@ -41,10 +41,10 @@ void udpHostNameToBin(struct UdpAddress *const address);
 bool udpAwaitMessage(int s, int timeoutMs);
 
 /** Read one message from an unconnected client.  Fill in the given address for the client and return the number of bytes read. */
-int udpReceiveFrom(int s, struct UdpAddress *const address, void *message, int messageLength);
+int udpReceiveFrom(int s, struct UdpAddress *const address, char *message, int messageLength);
 
 /** Send a message to the given unconnected client's address, return the number of bytes written. */
-int udpSendTo(int s, const struct UdpAddress *const address, const void *message, int messageLength);
+int udpSendTo(int s, const struct UdpAddress *const address, const char *message, int messageLength);
 
 /** Convert a 16-bit unsigned integer from netowrk to host byte order. */
 short unsigned int udpNToHS(short unsigned int netInt);

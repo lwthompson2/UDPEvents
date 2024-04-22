@@ -175,7 +175,7 @@ void UDPEventsPlugin::run()
             LOGD("UDP Events Thread received ", bytesRead, " bytes from host: ", clientAddress.hostName, " port: ", clientAddress.port);
 
             // Acknowledge message receipt to the client.
-            int bytesWritten = udpSendTo(serverSocket, &clientAddress, &serverSecs, 8);
+            int bytesWritten = udpSendTo(serverSocket, &clientAddress, (const char *)&serverSecs, 8);
             if (bytesWritten < 0)
             {
                 LOGE("UDP Events Thread had a write error.  Bytes written: ", bytesWritten, " error: ", udpErrorMessage());
