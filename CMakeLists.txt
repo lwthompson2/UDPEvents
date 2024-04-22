@@ -59,6 +59,9 @@ endif()
 
 #Libraries and compiler options
 if(MSVC)
+	# Build with Winsock for UDP support.
+	target_link_libraries(${PLUGIN_NAME} wsock32 ws2_32)
+
 	target_link_libraries(${PLUGIN_NAME} ${GUI_BIN_DIR}/open-ephys.lib)
 	target_compile_options(${PLUGIN_NAME} PRIVATE /sdl- /W0)
 	
