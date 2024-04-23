@@ -142,7 +142,7 @@ The alignment can preserve high timing precision -- more precise than the start 
 
 ### TTL Event Pairs
 
-For this alignment to work the client must send TTL Event messages via UDP with the same **LINE** number as a real, upstream TTL events on the same Open Ephys data stream.
+For this alignment to work the client must send TTL Event messages via UDP with the same **LINE** number as real, upstream TTL events on the same Open Ephys data stream.
 The soft timestamp for these TTL event messages should be the client's best estimate of when the real TTL event actually occurred, from the client's point of view.
 
 UDP Events will look for pairs of TTL events on the same **LINE** -- one from UDP and one from upstream in Open Ephys.
@@ -152,7 +152,7 @@ As other TTL and Text events arrive via UDP, UDP Events will convert their soft 
 
 ### Accuracy
 
-Alignment accuracy will be limited by how well the client can measure when real TTL events actually occurred and report its measurements via UDP.
+Alignment accuracy will be limited by how well the client can measure when real TTL events actually occur, and report these measurements via UDP.
 So, UDP Events will make the most sense when the client has solid timing and has control over both the UDP messages and the corresponding upstream events.
 Such a client could enrich a single DIO line with various other "soft TTL" and Text events.
 
@@ -164,7 +164,7 @@ You can test UDP Events using a Python script like [test-client.py](./test-clien
 This script depends on [pyzmq](https://pypi.org/project/pyzmq/).
 You might be able to install this with `pip install pyzmq`.
 
-This script also expects an Open Ephys signal chain with the following:
+This script expects an Open Ephys signal chain with the following:
 
  - [File Reader](https://open-ephys.github.io/gui-docs/User-Manual/Plugins/File-Reader.html) -- Provide sample data and a data stream to work in.
  - [Network Events](https://open-ephys.github.io/gui-docs/User-Manual/Plugins/Network-Events.html) -- Create upstream TTL events for UDP Events to look for.
@@ -178,10 +178,10 @@ This script also expects an Open Ephys signal chain with the following:
 ### Phony Client
 In this setup, [test-client.py](./test-client.py) will play the role of "client", with control over both Network Events and UDP Events.
 
-The signal chain's File Reader and Network Events together will stand in for a genuine data source like an [Acquisition Board](https://open-ephys.github.io/gui-docs/User-Manual/Plugins/Acquisition-Board.html), which might record both sampled signals and TTL events with respect to a single clock.
-Timing accuracy of this test setup will be limited by the relatively coarse, best-effort timing alignment of Network Events with upstream sample numbers.
+The signal chain's File Reader and Network Events will work together to stand in for a genuine data source like an [Acquisition Board](https://open-ephys.github.io/gui-docs/User-Manual/Plugins/Acquisition-Board.html), which might record both sampled signals and TTL events with respect to a single clock.
+Timing accuracy of this test setup will be limited by the relatively coarse, best-effort timing of Network Events with respect to upstream sample numbers.
 
-Choose **LINE** 4 in the UDP Events settings editor, to match the line numbers hard-coded in `test-client.py`.
+Choose **LINE** 4 in the UDP Events settings editor, to match the line number used in `test-client.py`.
 
 ### Running a Test
 
@@ -201,7 +201,7 @@ The script will send 10 pairs of TTL events on **LINE** 4.  For each pair:
  - a real/upstream event sent to Network Events
  - a soft UDP counterpart sent to UDP Events
 
-The upstream events themselves should be visible as blinking lights in the TTL Display Panel, and transparent overlays in the LFP Viewer window.  UDP Events will use the event pairs to align other events, below, and instert them into the selected data stream.
+The upstream events themselves should be visible as blinking lights in the TTL Display Panel, and transparent overlays in the LFP Viewer window.  UDP Events will use these event pairs to align other events, below, and instert them into the selected data stream.
 
 The script will also send 10 pairs of soft TTL events on **LINE** 1:
  - one to turn line 1 on
