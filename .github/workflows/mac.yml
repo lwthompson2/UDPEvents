@@ -21,11 +21,11 @@ jobs:
         run: |
           cd ../..
           git clone https://github.com/open-ephys/plugin-GUI.git --branch main
-          cd plugin-GUI/Build && cmake -G "XCode" ..
+          cd plugin-GUI/Build && cmake -G "Xcode" ..
       - name: build
         run: |
           cd Build
-          cmake -G "XCode" ..
+          cmake -G "Xcode" ..
           xcodebuild -configuration Release
       - name: versioning
         run: |
