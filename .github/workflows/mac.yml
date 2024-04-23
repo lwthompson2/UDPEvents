@@ -1,0 +1,39 @@
+name: mac
+
+on:
+  push:
+    tags:
+      - "*"
+env:
+  plugin_name: "UDPEvents-mac"
+  tag: "${{ github.ref_name }}"
+
+jobs:
+  build-mac:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest]
+
+    steps:
+      - uses: actions/checkout@v1
+      - name: setup
+        run: |
+          cd ../..
+          git clone https://github.com/open-ephys/plugin-GUI.git --branch main
+          cd plugin-GUI/Build && cmake -G "XCode" ..
+      - name: build
+        run: |
+          cd Build
+          cmake -G "XCode" ..
+          xcodebuild -configuration Release
+      - name: versioning
+        run: |
+          plugin_api=$(grep -rnw ../../plugin-GUI/Source -e '#define PLUGIN_API_VER' | grep -Eo "[0-9]*" | tail -1)
+          new_plugin_ver=$tag-API$plugin_api
+          echo "artifact_name=${plugin_name}_${new_plugin_ver}" >> "$GITHUB_ENV"
+      - name: upload-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ env.artifact_name }}"
+          path: "Build/*.bundle"
