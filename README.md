@@ -28,37 +28,36 @@ Download an artifact with a name like `UDPEvents-system_version-API8.zip` and un
 
 On Linux the `.zip` file contains a dynamic library file called `UDPEvents.so`.
 This is the plugin.
+Copy `UDPEvents.so` into a folder where Open Ephys can find it.
 
-Copy `UDPEvents.so` into the `plugins/` subdir of your Open Ephys GUI installation.
-You might need to figure out where this is.
-For example, using the [official Ubuntu installer](https://open-ephys.github.io/gui-docs/User-Manual/Installing-the-GUI.html#linux) the `plugins/` subdir ended up at `/usr/local/bin/open-ephys-gui/plugins/`.
-
-So, a copy command like this should work:
+The standard place would be your own user's `.config` directory, for example:
 
 ```
-sudo cp UDPEvents.so /usr/local/bin/open-ephys-gui/plugins/
+~/.config/open-ephys/plugins-api8
+```
+
+If for some reason that doesn't work, you might also try the `plugins/` subdir of your Open Ephys GUI installation.
+You might need root / `sudo` permission to copy into this directory.
+
+```
+/usr/local/bin/open-ephys-gui/plugins/
 ```
 
 Once the plugin is copied over you should be able to launch `open-ephys` and see "UDP Events" listed along with other plugins.
-
-#### subdir ownership
-
-For some reason, on one laptop, the installed `/usr/local/bin/open-ephys-gui` directory was owned by the `docker` user.
-Was this a weird quirk of the Open Ephys installer?
-Regardless, you might need to fix the ownership of this directory make it like the rest of `/usr/local/bin/`.
-
-```
-sudo chown -R root:root /usr/local/bin/open-ephys-gui/
-```
 
 ### Windows
 
 On Windows the `.zip` file contains a dynamic library file called `UDPEvents.dll`.
 This is the plugin.
+Copy `UDPEvents.dll` into a folder where Open Ephys can find it.
 
-Copy `UDPEvents.dll` into the `plugins/` subdir of your Open Ephys GUI installation.
-You might need to figure out where this is.
-A typical location might be:
+The standard place would be the system's common app data directory, for example:
+
+```
+C:\Documents and Settings\All Users\Application Data\Open Ephys\plugins-api8\"
+```
+
+If for some reason that doesn't work, you might also try the `plugins/` subdir of your Open Ephys GUI installation, for example:
 
 ```
 C:\Program Files\Open Ephys\plugins
@@ -68,7 +67,19 @@ Once the plugin is copied over, you should be able to launch the Open Ephys GUI 
 
 ### macOS
 
-TODO...
+On macOS the `.zip` file contains a dynamic library file called `UDPEvents.bundle`.
+This is the plugin.
+
+Copy `UDPEvents.bundle` into the `plugins/` subdir of your Open Ephys GUI installation.
+You might need to figure out where this is.
+Some possibilities might be:
+
+```
+/Applications/open-ephys.app/Contents/PlugIns/
+~/Library/Application Support/open-ephys/plugins-api8"
+```
+
+Once the plugin is copied over, you should be able to launch the Open Ephys GUI and see "UDP Events" listed along with other plugins.
 
 ## Integrating with Clients
 
