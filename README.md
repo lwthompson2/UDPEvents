@@ -38,6 +38,7 @@ The standard place would be your own user's `.config` directory, for example:
 
 If for some reason that doesn't work, you might also try the `plugins/` subdir of your Open Ephys GUI installation.
 You might need root / `sudo` permission to copy into this directory.
+For example:
 
 ```
 /usr/local/bin/open-ephys-gui/plugins/
@@ -69,14 +70,20 @@ Once the plugin is copied over, you should be able to launch the Open Ephys GUI 
 
 On macOS the `.zip` file contains a dynamic library file called `UDPEvents.bundle`.
 This is the plugin.
+Copy `UDPEvents.bundle` into a folder where Open Ephys can find it.
 
-Copy `UDPEvents.bundle` into the `plugins/` subdir of your Open Ephys GUI installation.
-You might need to figure out where this is.
-Some possibilities might be:
+The standard place would be your own users's application data directory, for example:
+
+```
+~/Library/Application Support/open-ephys/plugins-api8
+```
+
+If for some reason that doesn't work, you might also try the `PlugIns/` subdir of the open-ephys app bundle you installed.
+To do this you might need to use the terminal or right-click the open-ephys app and choose "Show Package Contents".
+For example:
 
 ```
 /Applications/open-ephys.app/Contents/PlugIns/
-~/Library/Application Support/open-ephys/plugins-api8"
 ```
 
 Once the plugin is copied over, you should be able to launch the Open Ephys GUI and see "UDP Events" listed along with other plugins.
