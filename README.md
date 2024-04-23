@@ -55,7 +55,7 @@ Copy `UDPEvents.dll` into a folder where Open Ephys can find it.
 The standard place would be the system's common app data directory, for example:
 
 ```
-C:\Documents and Settings\All Users\Application Data\Open Ephys\plugins-api8\"
+C:\Documents and Settings\All Users\Application Data\Open Ephys\plugins-api8\
 ```
 
 If for some reason that doesn't work, you might also try the `plugins/` subdir of your Open Ephys GUI installation, for example:
