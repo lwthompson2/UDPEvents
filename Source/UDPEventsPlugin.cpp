@@ -207,8 +207,7 @@ void UDPEventsPlugin::run()
                 textEvent.type = 2;
                 textEvent.clientSeconds = *((double *)(messageBuffer + 1));
                 textEvent.textLength = udpNToHS(*((uint16 *)(messageBuffer + 9)));
-                String text = String::fromUTF8(messageBuffer + 11, textEvent.textLength);
-                textEvent.text = text + "@" + String(textEvent.clientSeconds);
+                textEvent.text = String::fromUTF8(messageBuffer + 11, textEvent.textLength);
 
                 // Enqueue this to be handled below, on the main thread, in process().
                 {
@@ -264,7 +263,6 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                 while (!softEventQueue.empty())
                 {
                     const SoftEvent &softEvent = softEventQueue.front();
-                    softEventQueue.pop();
                     if (softEvent.type == 1)
                     {
                         // This is a TTL message.
@@ -275,7 +273,8 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                             if (syncComplete)
                             {
                                 // The working sync has seen both a real and a soft event.
-                                // Add it to the sync history and start a new sync going forward.
+                                // Record it as an event, add it to the sync history, and start a new sync going forward.
+                                addEventForSyncEstimate(workingSync);
                                 syncEstimates.push_back(workingSync);
                                 workingSync.clear();
                             }
@@ -283,10 +282,10 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                         else
                         {
                             // This is a soft TTL event to add to the selected stream.
+                            // We'll add it, if we can find a previous sync estimate.
                             int64 sampleNumber = softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
                             if (sampleNumber)
                             {
-                                // We'll only add it if we can find a previous sync estimate.
                                 TTLEventPtr ttlEvent = TTLEvent::createTTLEvent(ttlChannel,
                                                                                 sampleNumber,
                                                                                 softEvent.lineNumber,
@@ -298,18 +297,22 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                     else if (softEvent.type == 2)
                     {
                         // This is a Text message to add to the selected stream.
+                        // We'll add it, if we can find a previous sync estimate.
                         int64 sampleNumber = softSampleNumber(softEvent.clientSeconds, stream->getSampleRate());
                         if (sampleNumber)
                         {
-                            // We'll only add it if we can find a previous sync estimate.
-                            // For now, Open Ephys ignores the sampleNumber we pass for text events.
-                            // But we can still do our best effort!
+                            // Currently Open Ephys persists text events with low, per-block timing precision.
+                            // Append high-precision timing info to the message for later reconstruction.
+                            String messageText = softEvent.text + "@" + String(softEvent.clientSeconds) + "=" + String(sampleNumber);
                             TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
                                                                                 sampleNumber,
-                                                                                softEvent.text);
+                                                                                messageText);
                             addEvent(textEvent, 0);
                         }
                     }
+
+                    // Pop invokes destructor of message (and allocated text!) -- so wait until we're done.
+                    softEventQueue.pop();
                 }
             }
         }
@@ -333,6 +336,15 @@ int64 UDPEventsPlugin::softSampleNumber(double softSecs, float localSampleRate)
     return 0;
 }
 
+void UDPEventsPlugin::addEventForSyncEstimate(struct SyncEstimate syncEstimate)
+{
+    String text = "UDP Events sync on line " + String(syncLine + 1) + "@" + String(syncEstimate.syncSoftSecs) + "=" + String(syncEstimate.syncLocalSampleNumber);
+    TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
+                                                        syncEstimate.syncLocalSampleNumber,
+                                                        text);
+    addEvent(textEvent, 0);
+}
+
 void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
     if (event->getLine() == syncLine)
@@ -346,7 +358,8 @@ void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
                 if (completed)
                 {
                     // The working sync has seen both a real and a soft event.
-                    // Add it to the sync history and start a new sync going forward.
+                    // Record it as an event, add it to the sync history, and start a new sync going forward.
+                    addEventForSyncEstimate(workingSync);
                     syncEstimates.push_back(workingSync);
                     workingSync.clear();
                 }

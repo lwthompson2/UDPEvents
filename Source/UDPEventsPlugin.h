@@ -152,6 +152,9 @@ private:
 	SyncEstimate workingSync;
 	std::list<SyncEstimate> syncEstimates;
 
+	/** Add a text event to represent a completed sync estimate. */
+	void addEventForSyncEstimate(struct SyncEstimate syncEstimate);
+
 	/** Convert a soft timestamp to the nearest local sample number using the most relevant sync estimate. */
 	int64 softSampleNumber(double softSecs, float localSampleRate);
 };
