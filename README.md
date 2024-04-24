@@ -4,7 +4,7 @@ This repo is for an [Open Ephys GUI](https://github.com/open-ephys/plugin-GUI) p
 It's based on the Open Ephys [processor plugin template](https://github.com/open-ephys-plugins/processor-plugin-template).
 For more info on Open Ephys and plugins in general, please see the [Open Ephys docs](https://open-ephys.github.io/gui-docs/Tutorials/How-To-Make-Your-Own-Plugin.html).
 
-The UDP Events plugin can inject TTL and Text events into an existing Open Ephys data stream via a UDP network socket.
+The UDP Events plugin can inject TTL and text events into an existing Open Ephys data stream via a UDP network socket.
 It can align the "soft" timestamps from an external system to "real" sample numbers in the existing data stream.
 For TTL messages, the timestamp alignment can have high precision (more precise than Open Ephys data blocks).
 
@@ -12,9 +12,9 @@ For TTL messages, the timestamp alignment can have high precision (more precise 
 
 UDP Events will bind a **HOST** address and **PORT** number where it can receive UDP messages.
 
-It will look for real, upstream TTL events on a selected **LINE** and use these to align soft TTL and Text messages received via UDP.
+It will look for real, upstream TTL events on a selected **LINE** and use these to align soft TTL and text messages received via UDP.
 
-It will add aligned TTL and Text messages to a selected Open Ephys data stream, shown here as "**example_...**".
+It will add aligned TTL and text messages to a selected Open Ephys data stream, shown here as "**example_...**".
 
 ## Downloading and Installing
 
@@ -96,8 +96,8 @@ As each message arrives, UDP Events will:
 
  - take a local timestamp
  - reply to the client with this timestamp, as an acknowledgement
- - parse the message as a TTL or Text event
- - save the message in a queue, to be added to an existing data stream along with other data being processed
+ - parse the message as either TTL or text
+ - save the message in a queue, to be added to the selected data stream along with other signals and events
 
 The ack timestamps are informational only.
 Clients can use them to check that they are connecting to UDP Events as expected, and can expect that the timesamps will increase over time.
@@ -122,7 +122,7 @@ Text event messages should start with exactly 11 header bytes, followed by a var
 
 | byte index | number of bytes | data type | description |
 | --- | --- | --- | --- |
-| 0 | 1 | uint8 | **message type** for Text messages this is the literal value `0x02` |
+| 0 | 1 | uint8 | **message type** for text messages this is the literal value `0x02` |
 | 1 | 8 | double | **timestamp** event time in seconds (including fractions) from the client's point of view |
 | 9 | 2 | uint16 | **text length** byte length of text that follows (network byte order -- use [htons()](https://beej.us/guide/bgnet/html/#htonsman)) |
 | 11 | **text length** | char | **text** message text encoded as ASCII or UTF-8 |
@@ -138,25 +138,60 @@ UDP Events will reply to the sender of each message with an 8-byte acknowledgeme
 ## Data Stream Alignment
 
 UDP Events will align soft timestamps received in UDP messages to real sample numbers in a selected Open Ephys data stream.
-The alignment can preserve high timing precision -- more precise than the start of each Open Ephys data block.
+For TTL messages, the alignment preserves high timing precision -- more precise than the start of each Open Ephys data block.
 
 ### TTL Event Pairs
 
 For this alignment to work the client must send TTL Event messages via UDP with the same **LINE** number as real, upstream TTL events on the same Open Ephys data stream.
 The soft timestamp for these TTL event messages should be the client's best estimate of when the real TTL event actually occurred, from the client's point of view.
 
-UDP Events will look for pairs of TTL events on the same **LINE** -- one from UDP and one from upstream in Open Ephys.
+UDP Events will look for pairs of TTL events on the same **LINE** -- one from a UDP message and one from upstream in Open Ephys.
 For each pair it will estimate and record a conversion from client soft timestamp to data stream sample number.
 
-As other TTL and Text events arrive via UDP, UDP Events will convert their soft timestamps to the closest sample number on the selected data stream, and add the events to the stream.
+As other TTL and text messages arrive via UDP, UDP Events will convert their soft timestamps to the closest sample number on the selected data stream, and add them as events to the stream.
 
 ### Accuracy
 
 Alignment accuracy will be limited by how well the client can measure when real TTL events actually occur, and report these measurements via UDP.
 So, UDP Events will make the most sense when the client has solid timing and has control over both the UDP messages and the corresponding upstream events.
-Such a client could enrich a single DIO line with various other "soft TTL" and Text events.
+Such a client could enrich a single DIO line with various other "soft TTL" and text events.
 
 ![UDP Events DIO Example](./udp-events-open-ephys.png)
+
+### Reading Data Downstream / Offline
+
+#### TTL
+
+For soft TTL messages received via UDP, no special handling should be required.  UDP Events will save these as events to the selected data stream with high-precision sample numbers.  These sample numbers should flow all the way to the Open Ephys data file (Binary, NWB, etc.) just like other TTL events.
+
+#### Text
+
+Text messages are a bit different.
+As of writing (April 2024) Open Ephys only saves text events with relatively coarse, per-block timestamps.
+For some situations this might be sufficient.
+
+In case it's helpful to recover high-precision timing for text events, UDP Events appends timing info to the body of each text message it receives.
+
+The format looks like this:
+
+```
+original message text@<client_soft_timestamp>=<stream_sample_number>
+```
+
+Downstream tools can looking for the delimiters `@` and `=` at the end of each message and parse out the details.  The `<client_soft_timestamp>` would be the raw value in seconds sent by the client.  The `<stream_sample_number>` would be an aligned, integer sample number on the selected data stream.
+
+#### TTL Pair Text Events
+
+In addition, UDP Events saves a separate text event for each TTL event pair it receives on **LINE**, as described above.
+These record and expose the raw timing data that UDP Events uses when aligning client seconds to stream sample numbers.
+
+These messages have a similar format:
+
+```
+UDP Events sync on line <LINE>@<client_soft_timestamp>=<stream_sample_number>
+```
+
+These always start with the same literal text: `UDP Events sync on line `.  The following `<LINE>` is the selected **LINE** number.  As above, `<client_soft_timestamp>` is the raw value in seconds sent by the client.  Here, the `<stream_sample_number>` is the *actual* sample number of an upstream TTL event on the same **LINE**.
 
 ## Testing
 
@@ -211,6 +246,6 @@ These cycle line 1 as fast as the script can manage.
 The cycle time will usually be too quick to see in the TTL Display Panel or LFP viewer.
 But these events should be saved in the recorded data file with high timing precision -- perhaps receiving sample numbers that are 1 or 2 samples apart.
 
-Along with TTL event mesages above, the script will send 10 Text messages via UDP, which should also be saved in the data file.
+Along with TTL event mesages above, the script will send 10 text messages via UDP, which should also be saved in the data file.
 
 If all this happens, then it seems UDP Events is working for you!
