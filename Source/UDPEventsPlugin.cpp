@@ -172,7 +172,7 @@ void UDPEventsPlugin::run()
 
             // Who sent us this message?
             udpHostBinToName(&clientAddress);
-            LOGD("UDP Events Thread received ", bytesRead, " bytes from host: ", clientAddress.hostName, " port: ", clientAddress.port);
+            LOGE("UDP Events Thread received ", bytesRead, " bytes from host: ", clientAddress.hostName, " port: ", clientAddress.port);
 
             // Acknowledge message receipt to the client.
             int bytesWritten = udpSendTo(serverSocket, &clientAddress, (const char *)&serverSecs, 8);
@@ -181,7 +181,7 @@ void UDPEventsPlugin::run()
                 LOGE("UDP Events Thread had a write error.  Bytes written: ", bytesWritten, " error: ", udpErrorMessage());
                 continue;
             }
-            LOGD("UDP Events Thread sent ", bytesWritten, " bytes to host: ", clientAddress.hostName, " port: ", clientAddress.port);
+            LOGE("UDP Events Thread sent ", bytesWritten, " bytes to host: ", clientAddress.hostName, " port: ", clientAddress.port);
 
             // Process the message itself.
             uint8 messageType = (uint8)messageBuffer[0];
@@ -272,7 +272,7 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                         // This is a TTL message.
                         if (softEvent.lineNumber == syncLine)
                         {
-                            LOGE("UDP Events recording soft TTL sync info on line: ", softEvent.lineNumber);
+                            LOGE("UDP Events recording soft TTL sync info on line: ", (int)softEvent.lineNumber);
 
                             // This is a soft sync event corresponding to a real TTL event.
                             bool syncComplete = workingSync.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
@@ -359,14 +359,14 @@ void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
     if (event->getLine() == syncLine)
     {
-        LOGE("UDP Events saw a real TTL event on line: ", event->getLine());
+        LOGE("UDP Events saw a real TTL event on line: ", (int)event->getLine());
 
         // This real TTL event should corredspond to a soft TTL event.
         for (auto stream : dataStreams)
         {
             if (stream->getStreamId() == streamId)
             {
-                LOGE("UDP Events recording real TTL sync info on line: ", event->getLine());
+                LOGE("UDP Events recording real TTL sync info on line: ", (int)event->getLine());
 
                 bool completed = workingSync.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
                 if (completed)
