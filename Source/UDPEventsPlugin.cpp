@@ -122,7 +122,7 @@ bool UDPEventsPlugin::stopAcquisition()
 
 void UDPEventsPlugin::run()
 {
-    LOGD("UDP Events Thread is starting.");
+    LOGC("UDP Events Thread is starting.");
 
     // Create a new UDP socket to receive on.
     int serverSocket = udpOpenSocket();
@@ -149,7 +149,7 @@ void UDPEventsPlugin::run()
     struct UdpAddress boundAddress;
     udpGetAddress(serverSocket, &boundAddress);
     udpHostBinToName(&boundAddress);
-    LOGD("UDP Events Thread is ready to receive at address: ", boundAddress.hostName, " port: ", boundAddress.port);
+    LOGC("UDP Events Thread is ready to receive at address: ", boundAddress.hostName, " port: ", boundAddress.port);
 
     // Read the client addresses and messages text into local buffers.
     struct UdpAddress clientAddress;
@@ -172,7 +172,7 @@ void UDPEventsPlugin::run()
 
             // Who sent us this message?
             udpHostBinToName(&clientAddress);
-            LOGE("UDP Events Thread received ", bytesRead, " bytes from host: ", clientAddress.hostName, " port: ", clientAddress.port);
+            LOGC("UDP Events Thread received ", bytesRead, " bytes from host: ", clientAddress.hostName, " port: ", clientAddress.port);
 
             // Acknowledge message receipt to the client.
             int bytesWritten = udpSendTo(serverSocket, &clientAddress, (const char *)&serverSecs, 8);
@@ -181,7 +181,7 @@ void UDPEventsPlugin::run()
                 LOGE("UDP Events Thread had a write error.  Bytes written: ", bytesWritten, " error: ", udpErrorMessage());
                 continue;
             }
-            LOGE("UDP Events Thread sent ", bytesWritten, " bytes to host: ", clientAddress.hostName, " port: ", clientAddress.port);
+            LOGC("UDP Events Thread sent ", bytesWritten, " bytes to host: ", clientAddress.hostName, " port: ", clientAddress.port);
 
             // Process the message itself.
             uint8 messageType = (uint8)messageBuffer[0];
@@ -194,7 +194,7 @@ void UDPEventsPlugin::run()
                 ttlEvent.lineNumber = (uint8)messageBuffer[9];
                 ttlEvent.lineState = (uint8)messageBuffer[10];
 
-                LOGE("UDP Events got TTL message with client timestamp: ", ttlEvent.clientSeconds, " 0-based line number: ", (int)ttlEvent.lineNumber, " line state: ", (int)ttlEvent.lineState);
+                LOGC("UDP Events Thread got a TTL message with client timestamp: ", ttlEvent.clientSeconds, " 0-based line number: ", (int)ttlEvent.lineNumber, " line state: ", (int)ttlEvent.lineState);
 
                 // Enqueue this to be handled below, on the main thread, in process().
                 {
@@ -211,7 +211,7 @@ void UDPEventsPlugin::run()
                 textEvent.textLength = udpNToHS(*((uint16 *)(messageBuffer + 9)));
                 textEvent.text = String::fromUTF8(messageBuffer + 11, textEvent.textLength);
 
-                LOGE("UDP Events got Text message with client timestamp: ", textEvent.clientSeconds, " message length: ", (int)textEvent.textLength, " message: ", textEvent.text);
+                LOGC("UDP Events Thread got a Text message with client timestamp: ", textEvent.clientSeconds, " message length: ", (int)textEvent.textLength, " message: ", textEvent.text);
 
                 // Enqueue this to be handled below, on the main thread, in process().
                 {
@@ -229,7 +229,7 @@ void UDPEventsPlugin::run()
 
     // The main loop has exited so we're done, so clean up and let the UDP thread terminate.
     udpCloseSocket(serverSocket);
-    LOGD("UDP Events Thread is stopping.");
+    LOGC("UDP Events Thread is stopping.");
 }
 
 EventChannel *UDPEventsPlugin::pickTTLChannel()
@@ -272,7 +272,7 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                         // This is a TTL message.
                         if (softEvent.lineNumber == syncLine)
                         {
-                            LOGE("UDP Events recording soft TTL sync info on line: ", (int)softEvent.lineNumber);
+                            LOGC("UDP Events recording soft TTL sync info on 0-based line: ", (int)softEvent.lineNumber, " client soft secs ", softEvent.clientSeconds);
 
                             // This is a soft sync event corresponding to a real TTL event.
                             bool syncComplete = workingSync.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
@@ -330,7 +330,7 @@ int64 UDPEventsPlugin::softSampleNumber(double softSecs, float localSampleRate)
     // Look for the last completed sync estimate preceeding the given softSecs.
     for (auto current = syncEstimates.rbegin(); current != syncEstimates.rend(); ++current)
     {
-        LOGE("UDP Events has sync estimate with client soft secs: ", current->syncSoftSecs);
+        LOGC("UDP Events has a sync estimate with client soft secs: ", current->syncSoftSecs);
 
         if (current->syncSoftSecs <= softSecs)
         {
@@ -346,7 +346,7 @@ int64 UDPEventsPlugin::softSampleNumber(double softSecs, float localSampleRate)
 
 void UDPEventsPlugin::addEventForSyncEstimate(struct SyncEstimate syncEstimate)
 {
-    LOGE("UDP Events adding sync estimate for client soft secs: ", syncEstimate.syncSoftSecs);
+    LOGC("UDP Events adding sync estimate with client soft secs: ", syncEstimate.syncSoftSecs, " local sample number: ", (long)syncEstimate.syncLocalSampleNumber);
 
     String text = "UDP Events sync on line " + String(syncLine + 1) + "@" + String(syncEstimate.syncSoftSecs) + "=" + String(syncEstimate.syncLocalSampleNumber);
     TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
@@ -359,14 +359,14 @@ void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
     if (event->getLine() == syncLine)
     {
-        LOGE("UDP Events saw a real TTL event on line: ", (int)event->getLine());
+        LOGC("UDP Events saw a real TTL event on 0-based line: ", (int)event->getLine());
 
         // This real TTL event should corredspond to a soft TTL event.
         for (auto stream : dataStreams)
         {
             if (stream->getStreamId() == streamId)
             {
-                LOGE("UDP Events recording real TTL sync info on line: ", (int)event->getLine());
+                LOGC("UDP Events recording real TTL sync info on 0-based line: ", (int)event->getLine(), " local sample number: ", (long)event->getSampleNumber());
 
                 bool completed = workingSync.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
                 if (completed)
