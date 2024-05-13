@@ -194,6 +194,8 @@ void UDPEventsPlugin::run()
                 ttlEvent.lineNumber = (uint8)messageBuffer[9];
                 ttlEvent.lineState = (uint8)messageBuffer[10];
 
+                LOGE("UDP Events got TTL message with client timestamp: ", ttlEvent.clientSeconds, " 0-based line number: ", (int)ttlEvent.lineNumber, " line state: ", (int)ttlEvent.lineState);
+
                 // Enqueue this to be handled below, on the main thread, in process().
                 {
                     ScopedLock TTLlock(softEventQueueLock);
@@ -208,6 +210,8 @@ void UDPEventsPlugin::run()
                 textEvent.clientSeconds = *((double *)(messageBuffer + 1));
                 textEvent.textLength = udpNToHS(*((uint16 *)(messageBuffer + 9)));
                 textEvent.text = String::fromUTF8(messageBuffer + 11, textEvent.textLength);
+
+                LOGE("UDP Events got Text message with client timestamp: ", textEvent.clientSeconds, " message length: ", (int)textEvent.textLength, " message: ", textEvent.text);
 
                 // Enqueue this to be handled below, on the main thread, in process().
                 {
@@ -268,6 +272,8 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                         // This is a TTL message.
                         if (softEvent.lineNumber == syncLine)
                         {
+                            LOGE("UDP Events recording soft TTL sync info on line: ", softEvent.lineNumber);
+
                             // This is a soft sync event corresponding to a real TTL event.
                             bool syncComplete = workingSync.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
                             if (syncComplete)
@@ -324,6 +330,8 @@ int64 UDPEventsPlugin::softSampleNumber(double softSecs, float localSampleRate)
     // Look for the last completed sync estimate preceeding the given softSecs.
     for (auto current = syncEstimates.rbegin(); current != syncEstimates.rend(); ++current)
     {
+        LOGE("UDP Events has sync estimate with client soft secs: ", current->syncSoftSecs);
+
         if (current->syncSoftSecs <= softSecs)
         {
             // This is the most relevant sync estimate.
@@ -338,6 +346,8 @@ int64 UDPEventsPlugin::softSampleNumber(double softSecs, float localSampleRate)
 
 void UDPEventsPlugin::addEventForSyncEstimate(struct SyncEstimate syncEstimate)
 {
+    LOGE("UDP Events adding sync estimate for client soft secs: ", syncEstimate.syncSoftSecs);
+
     String text = "UDP Events sync on line " + String(syncLine + 1) + "@" + String(syncEstimate.syncSoftSecs) + "=" + String(syncEstimate.syncLocalSampleNumber);
     TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
                                                         syncEstimate.syncLocalSampleNumber,
@@ -349,11 +359,15 @@ void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
     if (event->getLine() == syncLine)
     {
+        LOGE("UDP Events saw a real TTL event on line: ", event->getLine());
+
         // This real TTL event should corredspond to a soft TTL event.
         for (auto stream : dataStreams)
         {
             if (stream->getStreamId() == streamId)
             {
+                LOGE("UDP Events recording real TTL sync info on line: ", event->getLine());
+
                 bool completed = workingSync.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
                 if (completed)
                 {
