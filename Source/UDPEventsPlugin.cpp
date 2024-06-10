@@ -309,7 +309,7 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                         {
                             // Currently Open Ephys persists text events with low, per-block timing precision.
                             // Append high-precision timing info to the message for later reconstruction.
-                            String messageText = softEvent.text + "@" + String(softEvent.clientSeconds) + "=" + String(sampleNumber);
+                            String messageText = softEvent.text + "@" + String(softEvent.clientSeconds, 8, false) + "=" + String(sampleNumber);
                             TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
                                                                                 sampleNumber,
                                                                                 messageText);
@@ -348,7 +348,7 @@ void UDPEventsPlugin::addEventForSyncEstimate(struct SyncEstimate syncEstimate)
 {
     LOGC("UDP Events adding sync estimate with client soft secs: ", syncEstimate.syncSoftSecs, " local sample number: ", (long)syncEstimate.syncLocalSampleNumber);
 
-    String text = "UDP Events sync on line " + String(syncLine + 1) + "@" + String(syncEstimate.syncSoftSecs) + "=" + String(syncEstimate.syncLocalSampleNumber);
+    String text = "UDP Events sync on line " + String(syncLine + 1) + "@" + String(syncEstimate.syncSoftSecs, 8, false) + "=" + String(syncEstimate.syncLocalSampleNumber);
     TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
                                                         syncEstimate.syncLocalSampleNumber,
                                                         text);

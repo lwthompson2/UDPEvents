@@ -26,7 +26,7 @@ start_time = time.time()
 
 # Take local timestamps relative to when the script started running.
 def up_secs():
-    return time.time() - start_time
+    return time.time() - start_time + 10000
 
 
 # Convert bytes of double-precision float to a printable string.
@@ -49,7 +49,7 @@ with zmq.Context() as zmq_context:
             # Send 10 groups of messages over about 10 seconds.
             for index in range(10):
 
-                time.sleep(0.75)
+                time.sleep(0.25)
 
                 # Start with a pair of TTL messages on the sync line, as if starting a trial.
                 # UDP Events will use this pair of events to estimate a conversion between:
