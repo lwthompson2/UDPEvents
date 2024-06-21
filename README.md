@@ -12,7 +12,7 @@ For TTL messages, the timestamp alignment can have high precision (more precise 
 
 UDP Events will bind a **HOST** address and **PORT** number where it can receive UDP messages.
 
-It will look for real, upstream TTL events on a selected **LINE** and use these to align soft TTL and text messages received via UDP.
+It will look for real, upstream TTL events on a selected **LINE**, with the selected **STATE** and use these to align soft TTL and text messages received via UDP.
 
 It will add aligned TTL and text messages to a selected Open Ephys data stream, shown here as "**example_...**".
 
@@ -146,6 +146,7 @@ For this alignment to work the client must send TTL Event messages via UDP with 
 The soft timestamp for these TTL event messages should be the client's best estimate of when the real TTL event actually occurred, from the client's point of view.
 
 UDP Events will look for pairs of TTL events on the same **LINE** -- one from a UDP message and one from upstream in Open Ephys.
+Optionally it can filter these events by a the line **STATE**: low, high, or both.
 For each pair it will estimate and record a conversion from client soft timestamp to data stream sample number.
 
 As other TTL and text messages arrive via UDP, UDP Events will convert their soft timestamps to the closest sample number on the selected data stream, and add them as events to the stream.

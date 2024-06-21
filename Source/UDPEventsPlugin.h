@@ -65,6 +65,7 @@ private:
 	uint16 portToBind = 12345;
 	uint16 streamId = 0;
 	uint8 syncLine = 0;
+	uint8 syncStateIndex = 0;
 
 	/** Hold events received via UDP, until processing them into the selected data stream. */
 	struct SoftEvent
@@ -151,6 +152,9 @@ private:
 	};
 	SyncEstimate workingSync;
 	std::list<SyncEstimate> syncEstimates;
+
+	//** Check whether incoming event data matches TTL event selection in the UI. */
+	bool filterSyncEvent(uint8 line, bool state);
 
 	/** Add a text event to represent a completed sync estimate. */
 	void addEventForSyncEstimate(struct SyncEstimate syncEstimate);

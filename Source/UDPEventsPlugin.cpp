@@ -64,6 +64,18 @@ UDPEventsPlugin::UDPEventsPlugin()
                             syncLines,
                             0,
                             false);
+
+    // Real TTL line state to use for sync events.
+    StringArray syncStates;
+    syncStates.add("both");
+    syncStates.add("high");
+    syncStates.add("low");
+    addCategoricalParameter(Parameter::GLOBAL_SCOPE,
+                            "state",
+                            "TTL line state for real sync events",
+                            syncStates,
+                            0,
+                            false);
 }
 
 UDPEventsPlugin::~UDPEventsPlugin()
@@ -96,6 +108,10 @@ void UDPEventsPlugin::parameterValueChanged(Parameter *param)
         // Looks like getValue() for a categorical parameter gives the selection index.
         // Because of how we set up the categories above, selection index works as the 0-based line number.
         syncLine = (uint8)(int)param->getValue();
+    }
+    else if (param->getName().equalsIgnoreCase("state"))
+    {
+        syncStateIndex = (uint8)(int)param->getValue();
     }
 }
 
@@ -270,9 +286,9 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                     if (softEvent.type == 1)
                     {
                         // This is a TTL message.
-                        if (softEvent.lineNumber == syncLine)
+                        if (filterSyncEvent(softEvent.lineNumber, (bool)softEvent.lineState))
                         {
-                            LOGC("UDP Events recording soft TTL sync info on 0-based line: ", (int)softEvent.lineNumber, " client soft secs ", softEvent.clientSeconds);
+                            LOGC("UDP Events recording soft TTL sync info on 0-based line: ", (int)softEvent.lineNumber, " state: ", (bool)softEvent.lineState, " client soft secs ", softEvent.clientSeconds);
 
                             // This is a soft sync event corresponding to a real TTL event.
                             bool syncComplete = workingSync.recordSoftTimestamp(softEvent.clientSeconds, stream->getSampleRate());
@@ -344,6 +360,22 @@ int64 UDPEventsPlugin::softSampleNumber(double softSecs, float localSampleRate)
     return 0;
 }
 
+bool UDPEventsPlugin::filterSyncEvent(uint8 line, bool state)
+{
+    switch (syncStateIndex)
+    {
+    case 1:
+        // syncStateIndex 1 means use only high state.
+        return line == syncLine && state;
+    case 2:
+        // syncStateIndex 2 means use only low state.
+        return line == syncLine && !state;
+    default:
+        // syncStateIndex 0 (or other) means use either state.
+        return line == syncLine;
+    }
+}
+
 void UDPEventsPlugin::addEventForSyncEstimate(struct SyncEstimate syncEstimate)
 {
     LOGC("UDP Events adding sync estimate with client soft secs: ", syncEstimate.syncSoftSecs, " local sample number: ", (long)syncEstimate.syncLocalSampleNumber);
@@ -357,16 +389,16 @@ void UDPEventsPlugin::addEventForSyncEstimate(struct SyncEstimate syncEstimate)
 
 void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
-    if (event->getLine() == syncLine)
+    if (filterSyncEvent(event->getLine(), event->getState()))
     {
-        LOGC("UDP Events saw a real TTL event on 0-based line: ", (int)event->getLine());
+        LOGC("UDP Events saw a real TTL event on 0-based line: ", (int)event->getLine(), " state: ", event->getState());
 
         // This real TTL event should corredspond to a soft TTL event.
         for (auto stream : dataStreams)
         {
             if (stream->getStreamId() == streamId)
             {
-                LOGC("UDP Events recording real TTL sync info on 0-based line: ", (int)event->getLine(), " local sample number: ", (long)event->getSampleNumber());
+                LOGC("UDP Events recording real TTL sync info on 0-based line: ", (int)event->getLine(), " state: ", event->getState(), " local sample number: ", (long)event->getSampleNumber());
 
                 bool completed = workingSync.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
                 if (completed)

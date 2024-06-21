@@ -27,15 +27,16 @@ UDPEventsPluginEditor::UDPEventsPluginEditor(GenericProcessor *parentNode)
     : GenericEditor(parentNode)
 {
     desiredWidth = 200;
-    addTextBoxParameterEditor("host", 10, 25);
-    addTextBoxParameterEditor("port", 100, 25);
+    addTextBoxParameterEditor("host", 10, 22);
+    addTextBoxParameterEditor("port", 100, 22);
 
-    addComboBoxParameterEditor("line", 10, 75);
+    addComboBoxParameterEditor("line", 10, 59);
+    addComboBoxParameterEditor("state", 100, 59);
 
     // Select stream with options updated dynamically.
     streamSelection = std::make_unique<ComboBox>("Stream Selector");
     streamSelection->setName("stream");
-    streamSelection->setBounds(100, 90, 75, 20);
+    streamSelection->setBounds(10, 105, 75, 20);
     streamSelection->addListener(this);
     addAndMakeVisible(streamSelection.get());
 }
