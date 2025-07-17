@@ -26,69 +26,77 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 UDPEventsPlugin::UDPEventsPlugin()
     : GenericProcessor("UDP Events"), Thread("UDP Events Thread")
-{
-    // Host address to bind for receiving as a server.
-    addStringParameter(Parameter::GLOBAL_SCOPE,
-                       "host",
-                       "Host address to bind for receiving UDP messages.",
-                       "127.0.0.1",
-                       true);
-
-    // Host port to bind for receiving as a server.
-    addIntParameter(Parameter::GLOBAL_SCOPE,
-                    "port",
-                    "Host port to bind for receiving UDP messages.",
-                    12345,
-                    0,
-                    65535,
-                    true);
-
-    // Id of data stream to filter.
-    addIntParameter(Parameter::GLOBAL_SCOPE,
-                    "stream",
-                    "Which data stream to filter",
-                    0,
-                    0,
-                    65535,
-                    true);
-
-    // Real TTL line to use for sync events.
-    StringArray syncLines;
-    for (int i = 1; i <= 256; i++)
-    {
-        syncLines.add(String(i));
-    }
-    addCategoricalParameter(Parameter::GLOBAL_SCOPE,
-                            "line",
-                            "TTL line number where real sync events will occur",
-                            syncLines,
-                            0,
-                            false);
-
-    // Real TTL line state to use for sync events.
-    StringArray syncStates;
-    syncStates.add("both");
-    syncStates.add("high");
-    syncStates.add("low");
-    addCategoricalParameter(Parameter::GLOBAL_SCOPE,
-                            "state",
-                            "TTL line state for real sync events",
-                            syncStates,
-                            0,
-                            false);
+{ 
 }
 
 UDPEventsPlugin::~UDPEventsPlugin()
 {
 }
 
-AudioProcessorEditor *UDPEventsPlugin::createEditor()
+void UDPEventsPlugin::registerParameters()
+{
+    // Register parameters here, if any
+
+    // Host port to bind for receiving as a server.
+    addIntParameter(Parameter::PROCESSOR_SCOPE, "port",
+        "Port",
+        "Host port to bind for receiving UDP messages.",
+        12345,
+        0,
+        65535,
+        true);
+
+    // Host address to bind for receiving as a server.
+    addStringParameter(Parameter::PROCESSOR_SCOPE, "host",
+        "Host",
+        "Host address to bind for receiving UDP messages.",
+        "127.0.0.1",
+        true);
+
+    // Id of data stream to filter.
+    addIntParameter(Parameter::GLOBAL_SCOPE, "stream",
+        "Stream",
+        "Which data stream to filter",
+        0,
+        0,
+        65535,
+        true);
+
+    // Real TTL line to use for sync events.
+    Array<String> syncLines;
+    for (int i = 1; i <= 256; i++)
+    {
+        syncLines.add(String(i));
+    }
+    addCategoricalParameter(Parameter::GLOBAL_SCOPE, 
+        "line",
+        "line",
+        "TTL line number where real sync events will occur",
+        syncLines,
+        0,
+        false);
+
+    // Real TTL line state to use for sync events.
+    Array<String> syncStates;
+    syncStates.add("both");
+    syncStates.add("high");
+    syncStates.add("low");
+    addCategoricalParameter(Parameter::GLOBAL_SCOPE,
+        "state",
+        "state",
+        "TTL line state for real sync events",
+        syncStates,
+        0,
+        false);
+}
+
+AudioProcessorEditor* UDPEventsPlugin::createEditor()
 {
     editor = std::make_unique<UDPEventsPluginEditor>(this);
     return editor.get();
 }
 
-void UDPEventsPlugin::parameterValueChanged(Parameter *param)
+void UDPEventsPlugin::parameterValueChanged(Parameter* param)
 {
     if (param->getName().equalsIgnoreCase("host"))
     {
@@ -184,7 +192,7 @@ void UDPEventsPlugin::run()
             }
 
             // Record a timestamp close to when we got the UDP message.
-            double serverSecs = (double)CoreServices::getSoftwareTimestamp() / CoreServices::getSoftwareSampleRate();
+            double serverSecs = (double)CoreServices::getSystemTime() /1000.0;
 
             // Who sent us this message?
             udpHostBinToName(&clientAddress);

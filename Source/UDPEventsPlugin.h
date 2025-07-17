@@ -37,6 +37,13 @@ public:
 	/** If the processor has a custom editor, this method must be defined to instantiate it. */
 	AudioProcessorEditor *createEditor() override;
 
+	void registerParameters() override;
+
+	/** Called every time the settings of an upstream plugin are changed.
+		Allows the processor to handle variations in the channel configuration or any other parameter
+		passed through signal chain. The processor can use this function to modify channel objects that
+		will be passed to downstream plugins. */
+
 	/** Update internal variables in respons selections made in the editor UI. */
 	void parameterValueChanged(Parameter *param) override;
 
