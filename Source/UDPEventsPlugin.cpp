@@ -54,7 +54,7 @@ void UDPEventsPlugin::registerParameters()
         true);
 
     // Id of data stream to filter.
-    addIntParameter(Parameter::GLOBAL_SCOPE, "stream",
+    addIntParameter(Parameter::PROCESSOR_SCOPE, "stream",
         "Stream",
         "Which data stream to filter",
         0,
@@ -68,9 +68,9 @@ void UDPEventsPlugin::registerParameters()
     {
         syncLines.add(String(i));
     }
-    addCategoricalParameter(Parameter::GLOBAL_SCOPE, 
+    addCategoricalParameter(Parameter::PROCESSOR_SCOPE,
         "line",
-        "line",
+        "Line",
         "TTL line number where real sync events will occur",
         syncLines,
         0,
@@ -81,9 +81,9 @@ void UDPEventsPlugin::registerParameters()
     syncStates.add("both");
     syncStates.add("high");
     syncStates.add("low");
-    addCategoricalParameter(Parameter::GLOBAL_SCOPE,
+    addCategoricalParameter(Parameter::PROCESSOR_SCOPE,
         "state",
-        "state",
+        "State",
         "TTL line state for real sync events",
         syncStates,
         0,

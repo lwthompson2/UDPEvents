@@ -26,17 +26,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 UDPEventsPluginEditor::UDPEventsPluginEditor(GenericProcessor *parentNode)
     : GenericEditor(parentNode)
 {
-    desiredWidth = 200;
-    addTextBoxParameterEditor(Parameter::PROCESSOR_SCOPE, "host", 10, 22);
-    addTextBoxParameterEditor(Parameter::PROCESSOR_SCOPE, "port", 100, 22);
+    desiredWidth = 125;
+    addTextBoxParameterEditor(Parameter::PROCESSOR_SCOPE, "host", 5, 22);
+    addTextBoxParameterEditor(Parameter::PROCESSOR_SCOPE, "port", 5, 44);
 
-    addComboBoxParameterEditor(Parameter::GLOBAL_SCOPE, "line", 10, 59);
-    addComboBoxParameterEditor(Parameter::GLOBAL_SCOPE, "state", 100, 59);
+    addComboBoxParameterEditor(Parameter::PROCESSOR_SCOPE, "line", 5, 66);
+    addComboBoxParameterEditor(Parameter::PROCESSOR_SCOPE, "state", 5, 88);
 
     // Select stream with options updated dynamically.
     streamSelection = std::make_unique<ComboBox>("Stream Selector");
     streamSelection->setName("stream");
-    streamSelection->setBounds(10, 105, 75, 20);
+    streamSelection->setBounds(5, 110, 100, 20);
     streamSelection->addListener(this);
     addAndMakeVisible(streamSelection.get());
 }
