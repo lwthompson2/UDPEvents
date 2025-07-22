@@ -192,7 +192,7 @@ void UDPEventsPlugin::run()
             }
 
             // Record a timestamp close to when we got the UDP message.
-            double serverSecs = (double)CoreServices::getSystemTime() /1000.0;
+            const int64 serverSecs = (double)CoreServices::getSystemTime(); 
 
             // Who sent us this message?
             udpHostBinToName(&clientAddress);
@@ -215,6 +215,7 @@ void UDPEventsPlugin::run()
                 SoftEvent ttlEvent;
                 ttlEvent.type = 1;
                 ttlEvent.clientSeconds = *((double *)(messageBuffer + 1));
+                ttlEvent.systemTimeMilliseconds = serverSecs;
                 ttlEvent.lineNumber = (uint8)messageBuffer[9];
                 ttlEvent.lineState = (uint8)messageBuffer[10];
 
@@ -232,6 +233,7 @@ void UDPEventsPlugin::run()
                 SoftEvent textEvent;
                 textEvent.type = 2;
                 textEvent.clientSeconds = *((double *)(messageBuffer + 1));
+                textEvent.systemTimeMilliseconds = serverSecs;
                 textEvent.textLength = udpNToHS(*((uint16 *)(messageBuffer + 9)));
                 textEvent.text = String::fromUTF8(messageBuffer + 11, textEvent.textLength);
 
@@ -317,7 +319,7 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                             if (sampleNumber)
                             {
                                 TTLEventPtr ttlEvent = TTLEvent::createTTLEvent(ttlChannel,
-                                                                                sampleNumber,
+                                                                                softEvent.systemTimeMilliseconds,
                                                                                 softEvent.lineNumber,
                                                                                 softEvent.lineState);
                                 addEvent(ttlEvent, 0);
@@ -335,8 +337,9 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                             // Append high-precision timing info to the message for later reconstruction.
                             String messageText = softEvent.text + "@" + String(softEvent.clientSeconds, 8, false) + "=" + String(sampleNumber);
                             TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
-                                                                                sampleNumber,
+                                                                                softEvent.systemTimeMilliseconds,
                                                                                 messageText);
+                            LOGC("Regular text event| type: ", typeid(softEvent.systemTimeMilliseconds).name(), " value: ", softEvent.systemTimeMilliseconds);
                             addEvent(textEvent, 0);
                         }
                     }
@@ -386,11 +389,11 @@ bool UDPEventsPlugin::filterSyncEvent(uint8 line, bool state)
 
 void UDPEventsPlugin::addEventForSyncEstimate(struct SyncEstimate syncEstimate)
 {
-    LOGC("UDP Events adding sync estimate with client soft secs: ", syncEstimate.syncSoftSecs, " local sample number: ", (long)syncEstimate.syncLocalSampleNumber);
-
+    LOGC("UDP Events adding sync estimate with client soft secs: ", syncEstimate.syncSoftSecs, " local timestamp: ", syncEstimate.syncLocalTimestamp);
+    LOGC("Sync text event| type: ", typeid(syncEstimate.syncLocalTimestamp).name(), " value: ", syncEstimate.syncLocalTimestamp);
     String text = "UDP Events sync on line " + String(syncLine + 1) + "@" + String(syncEstimate.syncSoftSecs, 8, false) + "=" + String(syncEstimate.syncLocalSampleNumber);
     TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
-                                                        syncEstimate.syncLocalSampleNumber,
+                                                        (int64)syncEstimate.syncLocalTimestamp,
                                                         text);
     addEvent(textEvent, 0);
 }
@@ -406,9 +409,11 @@ void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
         {
             if (stream->getStreamId() == streamId)
             {
-                LOGC("UDP Events recording real TTL sync info on 0-based line: ", (int)event->getLine(), " state: ", event->getState(), " local sample number: ", (long)event->getSampleNumber());
-
-                bool completed = workingSync.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
+                // Using event->getTimestampInSeconds() is not working, try calculating manually?
+                const int64 localMilliSecs = (double)((event->getSampleNumber() / stream->getSampleRate()) * 1000.0);
+                LOGC("UDP Events recording real TTL sync info on 0-based line: ", (int)event->getLine(), " state: ", event->getState(), " local timestamp: ", (int64)localMilliSecs);
+                workingSync.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
+                bool completed = workingSync.recordLocalTimestamp(localMilliSecs, stream->getSampleRate());
                 if (completed)
                 {
                     // The working sync has seen both a real and a soft event.

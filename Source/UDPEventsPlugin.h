@@ -83,6 +83,9 @@ private:
 		/** High-precision timestamp from the client's point of view. */
 		double clientSeconds = 0.0;
 
+		/** Acquisition message recv timestamp. */
+		int64 systemTimeMilliseconds = 0;
+
 		/** 0-based line number for TTL events. */
 		uint8 lineNumber = 0;
 
@@ -107,6 +110,9 @@ private:
 		/** Sample number of a real, local, sampled, sync event. */
 		int64 syncLocalSampleNumber = 0;
 
+		/** Timestamp of a real, local, sampled, sync event, I believe in ms. */
+		int64 syncLocalTimestamp = 0;
+
 		/** Timestamp of a corresponding soft, external sync event. */
 		double syncSoftSecs = 0.0;
 
@@ -117,6 +123,7 @@ private:
 		void clear()
 		{
 			syncLocalSampleNumber = 0;
+			syncLocalTimestamp = 0;
 			syncSoftSecs = 0.0;
 			softSampleZero = 0;
 		}
@@ -138,6 +145,18 @@ private:
 			{
 				softSampleZero = syncLocalSampleNumber - syncSoftSecs * localSampleRate;
 				LOGD("SyncEstimate computed softSampleZero ", (long)softSampleZero);
+				return true;
+			}
+			return false;
+		}
+
+		/** Record the timestamp of a real sync event, return whether the sync estimate is now complete. */
+		bool recordLocalTimestamp(int64 timeStamp, float localSampleRate)
+		{
+			syncLocalTimestamp = timeStamp;
+			LOGD("SyncEstimate got syncLocalTimestamp ", (int64)timeStamp, " at localSampleRate ", localSampleRate);
+			if (syncSoftSecs)
+			{
 				return true;
 			}
 			return false;
