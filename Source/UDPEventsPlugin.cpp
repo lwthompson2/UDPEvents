@@ -68,7 +68,7 @@ void UDPEventsPlugin::registerParameters()
     {
         syncLines.add(String(i));
     }
-    addCategoricalParameter(Parameter::PROCESSOR_SCOPE,
+    addCategoricalParameter(Parameter::STREAM_SCOPE,
         "line",
         "Line",
         "TTL line number where real sync events will occur",
@@ -81,7 +81,7 @@ void UDPEventsPlugin::registerParameters()
     syncStates.add("both");
     syncStates.add("high");
     syncStates.add("low");
-    addCategoricalParameter(Parameter::PROCESSOR_SCOPE,
+    addCategoricalParameter(Parameter::STREAM_SCOPE,
         "state",
         "State",
         "TTL line state for real sync events",
@@ -339,7 +339,7 @@ void UDPEventsPlugin::process(AudioBuffer<float> &buffer)
                             TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
                                                                                 softEvent.systemTimeMilliseconds,
                                                                                 messageText);
-                            LOGC("Regular text event| type: ", typeid(softEvent.systemTimeMilliseconds).name(), " value: ", softEvent.systemTimeMilliseconds);
+                            //LOGC("Regular text event| type: ", typeid(softEvent.systemTimeMilliseconds).name(), " value: ", softEvent.systemTimeMilliseconds);
                             addEvent(textEvent, 0);
                         }
                     }
@@ -390,16 +390,19 @@ bool UDPEventsPlugin::filterSyncEvent(uint8 line, bool state)
 void UDPEventsPlugin::addEventForSyncEstimate(struct SyncEstimate syncEstimate)
 {
     LOGC("UDP Events adding sync estimate with client soft secs: ", syncEstimate.syncSoftSecs, " local timestamp: ", syncEstimate.syncLocalTimestamp);
-    LOGC("Sync text event| type: ", typeid(syncEstimate.syncLocalTimestamp).name(), " value: ", syncEstimate.syncLocalTimestamp);
     String text = "UDP Events sync on line " + String(syncLine + 1) + "@" + String(syncEstimate.syncSoftSecs, 8, false) + "=" + String(syncEstimate.syncLocalSampleNumber);
     TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
-                                                        (int64)syncEstimate.syncLocalTimestamp,
-                                                        text);
+        syncEstimate.syncLocalTimestamp,
+        text);
     addEvent(textEvent, 0);
 }
 
 void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
 {
+    // Record a system timestamp for when we got this real ttl event.
+    const int64 systemMillisecs = CoreServices::getSystemTime();
+
+	// Check that the event is for the selected line and state.
     if (filterSyncEvent(event->getLine(), event->getState()))
     {
         LOGC("UDP Events saw a real TTL event on 0-based line: ", (int)event->getLine(), " state: ", event->getState());
@@ -409,16 +412,23 @@ void UDPEventsPlugin::handleTTLEvent(TTLEventPtr event)
         {
             if (stream->getStreamId() == streamId)
             {
-                // Using event->getTimestampInSeconds() is not working, try calculating manually?
-                const int64 localMilliSecs = (double)((event->getSampleNumber() / stream->getSampleRate()) * 1000.0);
-                LOGC("UDP Events recording real TTL sync info on 0-based line: ", (int)event->getLine(), " state: ", event->getState(), " local timestamp: ", (int64)localMilliSecs);
+				// Creating text events for GUI v1.0.0 requires system timestamps in milliseconds as opposed to stream sample numbers/timestamps (previous versions)
+                LOGC("UDP Events recording real TTL sync info on 0-based line: ", (int)event->getLine(), " state: ", event->getState(), " local timestamp: ", systemMillisecs);
+				// Record the local sample number associated with this real sync event to use as a key for offline alignment of other soft messages.
                 workingSync.recordLocalSampleNumber(event->getSampleNumber(), stream->getSampleRate());
-                bool completed = workingSync.recordLocalTimestamp(localMilliSecs, stream->getSampleRate());
+                // Record the system time to finish the sync and add a text sync event at the same time as the real TTL sync pulse.
+                bool completed = workingSync.recordLocalTimestamp(systemMillisecs, stream->getSampleRate());
                 if (completed)
                 {
                     // The working sync has seen both a real and a soft event.
                     // Record it as an event, add it to the sync history, and start a new sync going forward.
                     addEventForSyncEstimate(workingSync);
+                    LOGC("UDP Events adding sync estimate with client soft secs: ", workingSync.syncSoftSecs, " local timestamp: ", workingSync.syncLocalTimestamp);
+                    String text = "UDP Events sync on line " + String(syncLine + 1) + "@" + String(workingSync.syncSoftSecs, 8, false) + "=" + String(workingSync.syncLocalSampleNumber);
+                    TextEventPtr textEvent = TextEvent::createTextEvent(getMessageChannel(),
+						workingSync.syncLocalTimestamp,
+                        text);
+                    addEvent(textEvent, 0);
                     syncEstimates.push_back(workingSync);
                     workingSync.clear();
                 }

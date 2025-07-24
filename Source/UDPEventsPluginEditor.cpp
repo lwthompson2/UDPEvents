@@ -30,8 +30,8 @@ UDPEventsPluginEditor::UDPEventsPluginEditor(GenericProcessor *parentNode)
     addTextBoxParameterEditor(Parameter::PROCESSOR_SCOPE, "host", 5, 22);
     addTextBoxParameterEditor(Parameter::PROCESSOR_SCOPE, "port", 5, 44);
 
-    addComboBoxParameterEditor(Parameter::PROCESSOR_SCOPE, "line", 5, 66);
-    addComboBoxParameterEditor(Parameter::PROCESSOR_SCOPE, "state", 5, 88);
+    addComboBoxParameterEditor(Parameter::STREAM_SCOPE, "line", 5, 66);
+    addComboBoxParameterEditor(Parameter::STREAM_SCOPE, "state", 5, 88);
 
     // Select stream with options updated dynamically.
     streamSelection = std::make_unique<ComboBox>("Stream Selector");

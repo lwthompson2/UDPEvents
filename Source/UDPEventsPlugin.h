@@ -111,7 +111,7 @@ private:
 		int64 syncLocalSampleNumber = 0;
 
 		/** Timestamp of a real, local, sampled, sync event, I believe in ms. */
-		int64 syncLocalTimestamp = 0;
+		double syncLocalTimestamp = 0;
 
 		/** Timestamp of a corresponding soft, external sync event. */
 		double syncSoftSecs = 0.0;
@@ -154,7 +154,7 @@ private:
 		bool recordLocalTimestamp(int64 timeStamp, float localSampleRate)
 		{
 			syncLocalTimestamp = timeStamp;
-			LOGD("SyncEstimate got syncLocalTimestamp ", (int64)timeStamp, " at localSampleRate ", localSampleRate);
+			LOGD("SyncEstimate got syncLocalTimestamp ", timeStamp, " at localSampleRate ", localSampleRate);
 			if (syncSoftSecs)
 			{
 				return true;
