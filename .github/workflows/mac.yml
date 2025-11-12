@@ -1,9 +1,7 @@
 name: mac
 
-on:
-  push:
-    tags:
-      - "*"
+on: workflow_dispatch
+
 env:
   plugin_name: "UDPEvents-mac"
   tag: "${{ github.ref_name }}"
